@@ -67,6 +67,19 @@ export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientS
 export const ThreadEnvMode = Schema.Literals(["local", "worktree"]);
 export type ThreadEnvMode = typeof ThreadEnvMode.Type;
 
+export const DEFAULT_FEATURE_BRANCH_PREFIX = "t3code";
+
+/**
+ * Prefix prepended to AI-generated feature branch names (e.g. `t3code/add-dark-mode`).
+ * Must be a single git-ref path segment: starts with an alphanumeric or underscore,
+ * may contain dots, dashes, and underscores; no slashes or whitespace.
+ */
+export const FeatureBranchPrefix = TrimmedNonEmptyString.check(
+  Schema.isMaxLength(64),
+  Schema.isPattern(/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/),
+);
+export type FeatureBranchPrefix = typeof FeatureBranchPrefix.Type;
+
 const makeBinaryPathSetting = (fallback: string) =>
   TrimmedString.pipe(
     Schema.decodeTo(
@@ -123,6 +136,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("local" as const satisfies ThreadEnvMode)),
   ),
   addProjectBaseDirectory: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  featureBranchPrefix: FeatureBranchPrefix.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_FEATURE_BRANCH_PREFIX)),
+  ),
   textGenerationModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
       Effect.succeed({
@@ -225,6 +241,7 @@ export const ServerSettingsPatch = Schema.Struct({
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   addProjectBaseDirectory: Schema.optionalKey(Schema.String),
+  featureBranchPrefix: Schema.optionalKey(FeatureBranchPrefix),
   textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
   observability: Schema.optionalKey(
     Schema.Struct({
