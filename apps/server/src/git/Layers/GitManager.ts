@@ -380,8 +380,13 @@ interface CommitAndBranchSuggestion {
 
 function isCommitAction(
   action: GitStackedAction,
-): action is "commit" | "commit_push" | "commit_push_pr" {
-  return action === "commit" || action === "commit_push" || action === "commit_push_pr";
+): action is "commit" | "commit_push" | "commit_push_pr" | "commit_push_draft_pr" {
+  return (
+    action === "commit" ||
+    action === "commit_push" ||
+    action === "commit_push_pr" ||
+    action === "commit_push_draft_pr"
+  );
 }
 
 function formatCommitMessage(subject: string, body: string): string {
@@ -982,8 +987,10 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
           }
         : (result.action === "push" ||
               result.action === "create_pr" ||
+              result.action === "create_draft_pr" ||
               result.action === "commit_push" ||
-              result.action === "commit_push_pr") &&
+              result.action === "commit_push_pr" ||
+              result.action === "commit_push_draft_pr") &&
             openPr?.url &&
             (!currentBranchIsDefault ||
               result.pr.status === "created" ||
@@ -1089,7 +1096,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const runCommitStep = Effect.fn("runCommitStep")(function* (
     modelSelection: ModelSelection,
     cwd: string,
-    action: "commit" | "commit_push" | "commit_push_pr",
+    action: "commit" | "commit_push" | "commit_push_pr" | "commit_push_draft_pr",
     branch: string | null,
     commitMessage?: string,
     preResolvedSuggestion?: CommitAndBranchSuggestion,
@@ -1204,6 +1211,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     cwd: string,
     fallbackBranch: string | null,
     emit: GitActionProgressEmitter,
+    draft: boolean,
   ) {
     const details = yield* gitCore.statusDetails(cwd);
     const branch = details.branch ?? fallbackBranch;
@@ -1275,6 +1283,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         headSelector: headContext.preferredHeadSelector,
         title: generated.title,
         bodyFile,
+        draft,
       })
       .pipe(Effect.ensuring(fileSystem.remove(bodyFile).pipe(Effect.catch(() => Effect.void))));
 
@@ -1554,9 +1563,14 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
           input.action === "push" ||
           input.action === "commit_push" ||
           input.action === "commit_push_pr" ||
-          (input.action === "create_pr" &&
+          input.action === "commit_push_draft_pr" ||
+          ((input.action === "create_pr" || input.action === "create_draft_pr") &&
             (!initialStatus.hasUpstream || initialStatus.aheadCount > 0));
-        const wantsPr = input.action === "create_pr" || input.action === "commit_push_pr";
+        const wantsPr =
+          input.action === "create_pr" ||
+          input.action === "create_draft_pr" ||
+          input.action === "commit_push_pr" ||
+          input.action === "commit_push_draft_pr";
 
         if (input.featureBranch && !wantsCommit) {
           return yield* gitManagerError(
@@ -1570,7 +1584,10 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
             "Commit or stash local changes before pushing.",
           );
         }
-        if (input.action === "create_pr" && initialStatus.hasWorkingTreeChanges) {
+        if (
+          (input.action === "create_pr" || input.action === "create_draft_pr") &&
+          initialStatus.hasWorkingTreeChanges
+        ) {
           return yield* gitManagerError(
             "runStackedAction",
             "Commit local changes before creating a PR.",
@@ -1675,7 +1692,14 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
               .pipe(
                 Effect.tap(() => Ref.set(currentPhase, Option.some("pr"))),
                 Effect.flatMap(() =>
-                  runPrStep(modelSelection, input.cwd, currentBranch, progress.emit),
+                  runPrStep(
+                    modelSelection,
+                    input.cwd,
+                    currentBranch,
+                    progress.emit,
+                    input.action === "create_draft_pr" ||
+                      input.action === "commit_push_draft_pr",
+                  ),
                 ),
               )
           : { status: "skipped_not_requested" as const };

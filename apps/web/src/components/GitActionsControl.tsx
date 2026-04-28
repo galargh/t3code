@@ -500,7 +500,10 @@ export default function GitActionsControl({
       const actionBranch = actionStatus?.branch ?? null;
       const actionIsDefaultBranch = featureBranch ? false : isDefaultBranch;
       const actionCanCommit =
-        action === "commit" || action === "commit_push" || action === "commit_push_pr";
+        action === "commit" ||
+        action === "commit_push" ||
+        action === "commit_push_pr" ||
+        action === "commit_push_draft_pr";
       const includesCommit =
         actionCanCommit &&
         (action === "commit" || !!actionStatus?.hasWorkingTreeChanges || featureBranch);
@@ -512,8 +515,10 @@ export default function GitActionsControl({
         if (
           action !== "push" &&
           action !== "create_pr" &&
+          action !== "create_draft_pr" &&
           action !== "commit_push" &&
-          action !== "commit_push_pr"
+          action !== "commit_push_pr" &&
+          action !== "commit_push_draft_pr"
         ) {
           return;
         }
@@ -535,7 +540,7 @@ export default function GitActionsControl({
         hasWorkingTreeChanges: !!actionStatus?.hasWorkingTreeChanges,
         featureBranch,
         shouldPushBeforePr:
-          action === "create_pr" &&
+          (action === "create_pr" || action === "create_draft_pr") &&
           (!actionStatus?.hasUpstream || (actionStatus?.aheadCount ?? 0) > 0),
       });
       const scopedToastData = threadToastData ? { ...threadToastData } : undefined;
@@ -814,6 +819,10 @@ export default function GitActionsControl({
     }
     if (item.dialogAction === "create_pr") {
       void runGitActionWithToast({ action: "create_pr" });
+      return;
+    }
+    if (item.dialogAction === "create_draft_pr") {
+      void runGitActionWithToast({ action: "create_draft_pr" });
       return;
     }
     setExcludedFiles(new Set());
