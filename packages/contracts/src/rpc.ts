@@ -25,7 +25,17 @@ import {
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
   GitPullInput,
+  GitPullRequestChecksResult,
+  GitPullRequestCommentsResult,
+  GitPullRequestDetailResult,
+  GitPullRequestForCwdInput,
+  GitPullRequestMergeInput,
+  GitPullRequestMergeResult,
   GitPullRequestRefInput,
+  GitPullRequestRerunChecksInput,
+  GitPullRequestRerunChecksResult,
+  GitPullRequestUpdateBranchInput,
+  GitPullRequestUpdateBranchResult,
   GitPullResult,
   GitRemoveWorktreeInput,
   GitResolvePullRequestResult,
@@ -103,6 +113,12 @@ export const WS_METHODS = {
   gitInit: "git.init",
   gitResolvePullRequest: "git.resolvePullRequest",
   gitPreparePullRequestThread: "git.preparePullRequestThread",
+  gitPrDetail: "git.prDetail",
+  gitPrChecks: "git.prChecks",
+  gitPrComments: "git.prComments",
+  gitPrMerge: "git.prMerge",
+  gitPrRerunChecks: "git.prRerunChecks",
+  gitPrUpdateBranch: "git.prUpdateBranch",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -214,6 +230,42 @@ export const WsGitResolvePullRequestRpc = Rpc.make(WS_METHODS.gitResolvePullRequ
 export const WsGitPreparePullRequestThreadRpc = Rpc.make(WS_METHODS.gitPreparePullRequestThread, {
   payload: GitPreparePullRequestThreadInput,
   success: GitPreparePullRequestThreadResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrDetailRpc = Rpc.make(WS_METHODS.gitPrDetail, {
+  payload: GitPullRequestForCwdInput,
+  success: GitPullRequestDetailResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrChecksRpc = Rpc.make(WS_METHODS.gitPrChecks, {
+  payload: GitPullRequestForCwdInput,
+  success: GitPullRequestChecksResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrCommentsRpc = Rpc.make(WS_METHODS.gitPrComments, {
+  payload: GitPullRequestForCwdInput,
+  success: GitPullRequestCommentsResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrMergeRpc = Rpc.make(WS_METHODS.gitPrMerge, {
+  payload: GitPullRequestMergeInput,
+  success: GitPullRequestMergeResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrRerunChecksRpc = Rpc.make(WS_METHODS.gitPrRerunChecks, {
+  payload: GitPullRequestRerunChecksInput,
+  success: GitPullRequestRerunChecksResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrUpdateBranchRpc = Rpc.make(WS_METHODS.gitPrUpdateBranch, {
+  payload: GitPullRequestUpdateBranchInput,
+  success: GitPullRequestUpdateBranchResult,
   error: GitManagerServiceError,
 });
 
@@ -371,6 +423,12 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitRunStackedActionRpc,
   WsGitResolvePullRequestRpc,
   WsGitPreparePullRequestThreadRpc,
+  WsGitPrDetailRpc,
+  WsGitPrChecksRpc,
+  WsGitPrCommentsRpc,
+  WsGitPrMergeRpc,
+  WsGitPrRerunChecksRpc,
+  WsGitPrUpdateBranchRpc,
   WsGitListBranchesRpc,
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,

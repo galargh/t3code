@@ -9,7 +9,12 @@ import { Context } from "effect";
 import type { Effect } from "effect";
 
 import type { ProcessRunResult } from "../../processRunner.ts";
-import type { GitHubCliError } from "@t3tools/contracts";
+import type {
+  GitHubCliError,
+  GitPullRequestCheck,
+  GitPullRequestComment,
+  GitPullRequestDetail,
+} from "@t3tools/contracts";
 
 export interface GitHubPullRequestSummary {
   readonly number: number;
@@ -93,6 +98,62 @@ export interface GitHubCliShape {
     readonly cwd: string;
     readonly reference: string;
     readonly force?: boolean;
+  }) => Effect.Effect<void, GitHubCliError>;
+
+  /**
+   * Fetch full PR detail (title, body, draft, mergeable, mergeStateStatus, …).
+   */
+  readonly getPullRequestDetail: (input: {
+    readonly cwd: string;
+    readonly prNumber: number;
+  }) => Effect.Effect<GitPullRequestDetail, GitHubCliError>;
+
+  /**
+   * Fetch the check-runs list for a PR.
+   */
+  readonly getPullRequestChecks: (input: {
+    readonly cwd: string;
+    readonly prNumber: number;
+  }) => Effect.Effect<ReadonlyArray<GitPullRequestCheck>, GitHubCliError>;
+
+  /**
+   * Fetch and flatten a PR's issue comments + reviews + review-thread comments.
+   */
+  readonly getPullRequestComments: (input: {
+    readonly cwd: string;
+    readonly prNumber: number;
+  }) => Effect.Effect<ReadonlyArray<GitPullRequestComment>, GitHubCliError>;
+
+  /**
+   * Merge / squash / rebase a PR via `gh pr merge`. When `auto: true` is set
+   * and the PR is not yet "CLEAN", returns `{ status: "queued" }` so callers
+   * can present the right UX (auto-merge enabled vs immediate merge).
+   */
+  readonly mergePullRequest: (input: {
+    readonly cwd: string;
+    readonly prNumber: number;
+    readonly method: "merge" | "squash" | "rebase";
+    readonly auto?: boolean;
+    readonly deleteBranch?: boolean;
+  }) => Effect.Effect<{ readonly status: "merged" | "queued" }, GitHubCliError>;
+
+  /**
+   * Rerun a workflow run, all of its failed jobs, or a single job.
+   */
+  readonly rerunWorkflowRun: (input: {
+    readonly cwd: string;
+    readonly mode: "all" | "failed" | "job";
+    readonly workflowRunId?: string;
+    readonly jobId?: string;
+  }) => Effect.Effect<void, GitHubCliError>;
+
+  /**
+   * Update the PR's branch with the latest base (merge or rebase as configured
+   * in repo settings).
+   */
+  readonly updatePullRequestBranch: (input: {
+    readonly cwd: string;
+    readonly prNumber: number;
   }) => Effect.Effect<void, GitHubCliError>;
 }
 

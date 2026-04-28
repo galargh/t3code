@@ -71,6 +71,17 @@ function makeTestLayer(state: {
     preparePullRequestThread: () =>
       Effect.die("preparePullRequestThread should not be called in this test"),
     runStackedAction: () => Effect.die("runStackedAction should not be called in this test"),
+    getPullRequestDetail: () =>
+      Effect.die("getPullRequestDetail should not be called in this test"),
+    getPullRequestChecks: () =>
+      Effect.die("getPullRequestChecks should not be called in this test"),
+    getPullRequestComments: () =>
+      Effect.die("getPullRequestComments should not be called in this test"),
+    mergePullRequest: () => Effect.die("mergePullRequest should not be called in this test"),
+    rerunPullRequestChecks: () =>
+      Effect.die("rerunPullRequestChecks should not be called in this test"),
+    updatePullRequestBranch: () =>
+      Effect.die("updatePullRequestBranch should not be called in this test"),
   };
 
   return GitStatusBroadcasterLive.pipe(Layer.provide(Layer.succeed(GitManager, gitManager)));
@@ -269,6 +280,17 @@ describe("GitStatusBroadcasterLive", () => {
           preparePullRequestThread: () =>
             Effect.die("preparePullRequestThread should not be called in this test"),
           runStackedAction: () => Effect.die("runStackedAction should not be called in this test"),
+          getPullRequestDetail: () =>
+            Effect.die("getPullRequestDetail should not be called in this test"),
+          getPullRequestChecks: () =>
+            Effect.die("getPullRequestChecks should not be called in this test"),
+          getPullRequestComments: () =>
+            Effect.die("getPullRequestComments should not be called in this test"),
+          mergePullRequest: () => Effect.die("mergePullRequest should not be called in this test"),
+          rerunPullRequestChecks: () =>
+            Effect.die("rerunPullRequestChecks should not be called in this test"),
+          updatePullRequestBranch: () =>
+            Effect.die("updatePullRequestBranch should not be called in this test"),
         } satisfies GitManagerShape),
       ),
     );

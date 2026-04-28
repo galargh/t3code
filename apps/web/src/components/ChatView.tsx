@@ -42,6 +42,7 @@ import { readEnvironmentApi } from "../environmentApi";
 import { isElectron } from "../env";
 import { readLocalApi } from "../localApi";
 import { parseDiffRouteSearch, stripDiffSearchParams } from "../diffRouteSearch";
+import { parsePrRouteSearch, stripPrSearchParams } from "../prRouteSearch";
 import {
   collapseExpandedComposerCursor,
   parseStandaloneComposerSlashCommand,
@@ -320,6 +321,7 @@ type ChatViewProps =
       environmentId: EnvironmentId;
       threadId: ThreadId;
       onDiffPanelOpen?: () => void;
+      onPrPanelOpen?: () => void;
       reserveTitleBarControlInset?: boolean;
       routeKind: "server";
       draftId?: never;
@@ -328,6 +330,7 @@ type ChatViewProps =
       environmentId: EnvironmentId;
       threadId: ThreadId;
       onDiffPanelOpen?: () => void;
+      onPrPanelOpen?: () => void;
       reserveTitleBarControlInset?: boolean;
       routeKind: "draft";
       draftId: DraftId;
@@ -590,6 +593,7 @@ export default function ChatView(props: ChatViewProps) {
     threadId,
     routeKind,
     onDiffPanelOpen,
+    onPrPanelOpen,
     reserveTitleBarControlInset = true,
   } = props;
   const draftId = routeKind === "draft" ? props.draftId : null;
@@ -620,7 +624,10 @@ export default function ChatView(props: ChatViewProps) {
   const navigate = useNavigate();
   const rawSearch = useSearch({
     strict: false,
-    select: (params) => parseDiffRouteSearch(params),
+    select: (params) => ({
+      ...parseDiffRouteSearch(params),
+      ...parsePrRouteSearch(params),
+    }),
   });
   const { resolvedTheme } = useTheme();
   // Granular store selectors — avoid subscribing to prompt changes.
@@ -793,6 +800,7 @@ export default function ChatView(props: ChatViewProps) {
   const isLocalDraftThread = !isServerThread && localDraftThread !== undefined;
   const canCheckoutPullRequestIntoThread = isLocalDraftThread;
   const diffOpen = rawSearch.diff === "1";
+  const prOpen = rawSearch.pr === "1";
   const activeThreadId = activeThread?.id ?? null;
   const activeThreadRef = useMemo(
     () => (activeThread ? scopeThreadRef(activeThread.environmentId, activeThread.id) : null),
@@ -1491,11 +1499,31 @@ export default function ChatView(props: ChatViewProps) {
       },
       replace: true,
       search: (previous) => {
-        const rest = stripDiffSearchParams(previous);
+        const rest = stripPrSearchParams(stripDiffSearchParams(previous));
         return diffOpen ? { ...rest, diff: undefined } : { ...rest, diff: "1" };
       },
     });
   }, [diffOpen, environmentId, isServerThread, navigate, onDiffPanelOpen, threadId]);
+  const onTogglePr = useCallback(() => {
+    if (!isServerThread) {
+      return;
+    }
+    if (!prOpen) {
+      onPrPanelOpen?.();
+    }
+    void navigate({
+      to: "/$environmentId/$threadId",
+      params: {
+        environmentId,
+        threadId,
+      },
+      replace: true,
+      search: (previous) => {
+        const rest = stripPrSearchParams(stripDiffSearchParams(previous));
+        return prOpen ? { ...rest, pr: undefined } : { ...rest, pr: "1" };
+      },
+    });
+  }, [environmentId, isServerThread, navigate, onPrPanelOpen, prOpen, threadId]);
 
   const envLocked = Boolean(
     activeThread &&
@@ -3267,12 +3295,14 @@ export default function ChatView(props: ChatViewProps) {
           diffToggleShortcutLabel={diffPanelShortcutLabel}
           gitCwd={gitCwd}
           diffOpen={diffOpen}
+          prOpen={prOpen}
           onRunProjectScript={runProjectScript}
           onAddProjectScript={saveProjectScript}
           onUpdateProjectScript={updateProjectScript}
           onDeleteProjectScript={deleteProjectScript}
           onToggleTerminal={toggleTerminalVisibility}
           onToggleDiff={onToggleDiff}
+          onTogglePr={onTogglePr}
         />
       </header>
 

@@ -99,6 +99,12 @@ export interface WsRpcClient {
     readonly preparePullRequestThread: RpcUnaryMethod<
       typeof WS_METHODS.gitPreparePullRequestThread
     >;
+    readonly prDetail: RpcUnaryMethod<typeof WS_METHODS.gitPrDetail>;
+    readonly prChecks: RpcUnaryMethod<typeof WS_METHODS.gitPrChecks>;
+    readonly prComments: RpcUnaryMethod<typeof WS_METHODS.gitPrComments>;
+    readonly prMerge: RpcUnaryMethod<typeof WS_METHODS.gitPrMerge>;
+    readonly prRerunChecks: RpcUnaryMethod<typeof WS_METHODS.gitPrRerunChecks>;
+    readonly prUpdateBranch: RpcUnaryMethod<typeof WS_METHODS.gitPrUpdateBranch>;
   };
   readonly server: {
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
@@ -203,6 +209,14 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         transport.request((client) => client[WS_METHODS.gitResolvePullRequest](input)),
       preparePullRequestThread: (input) =>
         transport.request((client) => client[WS_METHODS.gitPreparePullRequestThread](input)),
+      prDetail: (input) => transport.request((client) => client[WS_METHODS.gitPrDetail](input)),
+      prChecks: (input) => transport.request((client) => client[WS_METHODS.gitPrChecks](input)),
+      prComments: (input) => transport.request((client) => client[WS_METHODS.gitPrComments](input)),
+      prMerge: (input) => transport.request((client) => client[WS_METHODS.gitPrMerge](input)),
+      prRerunChecks: (input) =>
+        transport.request((client) => client[WS_METHODS.gitPrRerunChecks](input)),
+      prUpdateBranch: (input) =>
+        transport.request((client) => client[WS_METHODS.gitPrUpdateBranch](input)),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),

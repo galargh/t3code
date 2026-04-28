@@ -10,7 +10,17 @@ import {
   GitActionProgressEvent,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
+  GitPullRequestChecksResult,
+  GitPullRequestCommentsResult,
+  GitPullRequestDetailResult,
+  GitPullRequestForCwdInput,
+  GitPullRequestMergeInput,
+  GitPullRequestMergeResult,
   GitPullRequestRefInput,
+  GitPullRequestRerunChecksInput,
+  GitPullRequestRerunChecksResult,
+  GitPullRequestUpdateBranchInput,
+  GitPullRequestUpdateBranchResult,
   GitResolvePullRequestResult,
   GitRunStackedActionInput,
   GitRunStackedActionResult,
@@ -94,6 +104,50 @@ export interface GitManagerShape {
     input: GitRunStackedActionInput,
     options?: GitRunStackedActionOptions,
   ) => Effect.Effect<GitRunStackedActionResult, GitManagerServiceError>;
+
+  /**
+   * Fetch full PR detail (title, body, draft, mergeable, mergeStateStatus, …).
+   */
+  readonly getPullRequestDetail: (
+    input: GitPullRequestForCwdInput,
+  ) => Effect.Effect<GitPullRequestDetailResult, GitManagerServiceError>;
+
+  /**
+   * Fetch a PR's check-runs list.
+   */
+  readonly getPullRequestChecks: (
+    input: GitPullRequestForCwdInput,
+  ) => Effect.Effect<GitPullRequestChecksResult, GitManagerServiceError>;
+
+  /**
+   * Fetch and flatten a PR's comments.
+   */
+  readonly getPullRequestComments: (
+    input: GitPullRequestForCwdInput,
+  ) => Effect.Effect<GitPullRequestCommentsResult, GitManagerServiceError>;
+
+  /**
+   * Merge / squash / rebase a PR (optionally as auto-merge).
+   * After completing, invalidates cached git status snapshots so subsequent
+   * status reads observe the new PR/branch state.
+   */
+  readonly mergePullRequest: (
+    input: GitPullRequestMergeInput,
+  ) => Effect.Effect<GitPullRequestMergeResult, GitManagerServiceError>;
+
+  /**
+   * Rerun a workflow run / its failed jobs / a single job for a PR's checks.
+   */
+  readonly rerunPullRequestChecks: (
+    input: GitPullRequestRerunChecksInput,
+  ) => Effect.Effect<GitPullRequestRerunChecksResult, GitManagerServiceError>;
+
+  /**
+   * Update a PR's branch with the latest base ref, then invalidate status cache.
+   */
+  readonly updatePullRequestBranch: (
+    input: GitPullRequestUpdateBranchInput,
+  ) => Effect.Effect<GitPullRequestUpdateBranchResult, GitManagerServiceError>;
 }
 
 /**
