@@ -71,8 +71,8 @@ function resolveCommandEditorArgs(
       return [...(line ? ["--line", line] : []), ...(column ? ["--column", column] : []), path];
     }
     case "macos-open":
-    case "macos-open-cwd-flag":
-      // Handled by resolveEditorLaunch directly via resolveMacosOpenLaunch.
+    case "ghostty-cli":
+      // Handled by resolveEditorLaunch directly.
       return [target];
   }
 }
@@ -199,20 +199,43 @@ export const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
     return yield* new OpenError({ message: `Unknown editor: ${input.editor}` });
   }
 
-  if (editorDef.launchStyle === "macos-open" || editorDef.launchStyle === "macos-open-cwd-flag") {
+  if (editorDef.launchStyle === "macos-open") {
     const appBundle = "macosAppBundle" in editorDef ? editorDef.macosAppBundle : undefined;
     if (!appBundle) {
       return yield* new OpenError({
         message: `Editor ${input.editor} is missing macosAppBundle`,
       });
     }
-    if (editorDef.launchStyle === "macos-open") {
-      return { command: "open", args: ["-a", appBundle, input.cwd] };
+    return { command: "open", args: ["-a", appBundle, input.cwd] };
+  }
+
+  if (editorDef.launchStyle === "ghostty-cli") {
+    // Prefer Ghostty's own CLI: it sends an IPC action to a running instance,
+    // honors --working-directory per invocation, and supports +new-tab. The
+    // `open -na Ghostty` path drops --working-directory and ignores tab/window
+    // selection when Ghostty is already running, so the CLI is required to fix
+    // both "wrong directory after switching threads" and "always opens a new
+    // window" bugs.
+    if (isCommandAvailable("ghostty", { platform, env })) {
+      return {
+        command: "ghostty",
+        args: ["+new-tab", `--working-directory=${input.cwd}`],
+      };
     }
-    return {
-      command: "open",
-      args: ["-na", appBundle, "--args", `--working-directory=${input.cwd}`],
-    };
+    const appBundle = "macosAppBundle" in editorDef ? editorDef.macosAppBundle : undefined;
+    if (platform === "darwin" && appBundle) {
+      // Fall back to `open -na`. Known limitation: when Ghostty is already
+      // running it will open a new window with its startup cwd instead of the
+      // requested directory. Users hitting this should install the `ghostty`
+      // CLI symlink (Ghostty > Settings > "Install ghostty CLI symlink").
+      return {
+        command: "open",
+        args: ["-na", appBundle, "--args", `--working-directory=${input.cwd}`],
+      };
+    }
+    return yield* new OpenError({
+      message: `Ghostty CLI not on PATH and no app bundle available on platform ${platform}`,
+    });
   }
 
   if (editorDef.commands) {

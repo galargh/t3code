@@ -286,6 +286,26 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
     }),
   );
 
+  it.effect("uses the ghostty CLI with +new-tab when it is on PATH", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "t3-ghostty-cli-" });
+      yield* fs.writeFileString(path.join(dir, "ghostty"), "#!/bin/sh\nexit 0\n");
+      yield* fs.chmod(path.join(dir, "ghostty"), 0o755);
+
+      const ghosttyLaunch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "ghostty" },
+        "darwin",
+        { PATH: dir },
+      );
+      assert.deepEqual(ghosttyLaunch, {
+        command: "ghostty",
+        args: ["+new-tab", "--working-directory=/tmp/workspace"],
+      });
+    }),
+  );
+
   it.effect("maps file-manager editor to OS open commands", () =>
     Effect.gen(function* () {
       const launch1 = yield* resolveEditorLaunch(
