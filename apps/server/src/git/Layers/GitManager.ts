@@ -1480,11 +1480,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         });
         const details = yield* gitCore.statusDetails(input.cwd);
         const localBranch = details.branch ?? pullRequest.headBranch;
-        yield* configurePullRequestHeadUpstream(
-          input.cwd,
-          pullRequestWithRemoteInfo,
-          localBranch,
-        );
+        yield* configurePullRequestHeadUpstream(input.cwd, pullRequestWithRemoteInfo, localBranch);
         yield* recordPullRequestBranchMetadata(input.cwd, localBranch, pullRequestWithRemoteInfo);
         return {
           pullRequest,
@@ -1798,8 +1794,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
                     input.cwd,
                     currentBranch,
                     progress.emit,
-                    input.action === "create_draft_pr" ||
-                      input.action === "commit_push_draft_pr",
+                    input.action === "create_draft_pr" || input.action === "commit_push_draft_pr",
                   ),
                 ),
               )

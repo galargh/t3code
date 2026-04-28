@@ -113,6 +113,9 @@ export interface WsRpcClient {
     readonly subscribeAuthAccess: RpcStreamMethod<typeof WS_METHODS.subscribeAuthAccess>;
   };
   readonly orchestration: {
+    readonly cleanupThreadOrphans: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.cleanupThreadOrphans
+    >;
     readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
     readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
     readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
@@ -233,6 +236,8 @@ export function createWsRpcClient(transport: WsTransport): WsRpcClient {
         ),
     },
     orchestration: {
+      cleanupThreadOrphans: (input) =>
+        transport.request((client) => client[ORCHESTRATION_WS_METHODS.cleanupThreadOrphans](input)),
       dispatchCommand: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.dispatchCommand](input)),
       getTurnDiff: (input) =>

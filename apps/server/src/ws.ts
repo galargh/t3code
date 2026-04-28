@@ -7,6 +7,7 @@ import {
   type OrchestrationCommand,
   type GitActionProgressEvent,
   type GitManagerServiceError,
+  OrchestrationCleanupThreadOrphansError,
   OrchestrationDispatchCommandError,
   type OrchestrationEvent,
   type OrchestrationShellStreamEvent,
@@ -36,6 +37,7 @@ import { Keybindings } from "./keybindings.ts";
 import { Open, resolveAvailableEditors } from "./open.ts";
 import { normalizeDispatchCommand } from "./orchestration/Normalizer.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
+import { OrchestrationThreadCleanup } from "./orchestration/Services/OrchestrationThreadCleanup.ts";
 import { ProjectionSnapshotQuery } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
 import {
   observeRpcEffect,
@@ -132,6 +134,7 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
+      const orchestrationThreadCleanup = yield* OrchestrationThreadCleanup;
       const orchestrationEngine = yield* OrchestrationEngineService;
       const checkpointDiffQuery = yield* CheckpointDiffQuery;
       const keybindings = yield* Keybindings;
@@ -656,6 +659,20 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
                 (cause) =>
                   new OrchestrationReplayEventsError({
                     message: "Failed to replay orchestration events",
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "orchestration" },
+          ),
+        [ORCHESTRATION_WS_METHODS.cleanupThreadOrphans]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.cleanupThreadOrphans,
+            orchestrationThreadCleanup.cleanupThreadOrphans(input.threadId).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationCleanupThreadOrphansError({
+                    message: `Failed to clean up orphan projection rows for thread ${input.threadId}`,
                     cause,
                   }),
               ),

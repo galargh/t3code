@@ -433,3 +433,167 @@ describe("resyncThreadDetailSubscription", () => {
     await resetEnvironmentServiceForTests();
   });
 });
+
+describe("cleanupAndResyncThreadDetailSubscription", () => {
+  const mockCleanupThreadOrphans = vi.fn();
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mockThreadUnsubscribe.mockImplementation(() => undefined);
+    mockSubscribeThread.mockImplementation(() => mockThreadUnsubscribe);
+    mockCleanupThreadOrphans.mockResolvedValue({
+      deletedActivities: 0,
+      deletedMessages: 0,
+      deletedProposedPlans: 0,
+    });
+    mockCreateWsRpcClient.mockReturnValue({
+      orchestration: {
+        cleanupThreadOrphans: mockCleanupThreadOrphans,
+        subscribeThread: mockSubscribeThread,
+      },
+    });
+    mockCreateEnvironmentConnection.mockImplementation((input) => ({
+      kind: input.kind,
+      environmentId: input.knownEnvironment.environmentId,
+      knownEnvironment: input.knownEnvironment,
+      client: input.client,
+      ensureBootstrapped: vi.fn(async () => undefined),
+      reconnect: vi.fn(async () => undefined),
+      dispose: vi.fn(async () => undefined),
+    }));
+    mockSavedEnvironmentRegistrySubscribe.mockReturnValue(() => undefined);
+    mockWaitForSavedEnvironmentRegistryHydration.mockResolvedValue(undefined);
+    mockListSavedEnvironmentRecords.mockReturnValue([]);
+  });
+
+  afterEach(async () => {
+    const { resetEnvironmentServiceForTests } = await import("./service");
+    await resetEnvironmentServiceForTests();
+    vi.useRealTimers();
+  });
+
+  it("calls server cleanup BEFORE re-subscribing so the snapshot reflects the cleaned state", async () => {
+    const {
+      cleanupAndResyncThreadDetailSubscription,
+      retainThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-cleanup");
+
+    const callOrder: Array<string> = [];
+    mockCleanupThreadOrphans.mockImplementation(async () => {
+      callOrder.push("cleanup");
+      return { deletedActivities: 2, deletedMessages: 1, deletedProposedPlans: 0 };
+    });
+    mockSubscribeThread.mockImplementation(() => {
+      callOrder.push("subscribe");
+      return mockThreadUnsubscribe;
+    });
+
+    const release = retainThreadDetailSubscription(environmentId, threadId);
+    // The retain itself triggers a subscribe; reset the order tracker so the
+    // assertion targets only what cleanupAndResync does.
+    callOrder.length = 0;
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+
+    const outcome = await cleanupAndResyncThreadDetailSubscription(environmentId, threadId);
+
+    expect(outcome).toEqual({
+      kind: "ok",
+      cleanup: { deletedActivities: 2, deletedMessages: 1, deletedProposedPlans: 0 },
+      resyncIssued: true,
+    });
+    expect(mockCleanupThreadOrphans).toHaveBeenCalledWith({ threadId });
+    // cleanup must finish before the new subscribe so the snapshot the server
+    // returns is the post-cleanup state.
+    expect(callOrder).toEqual(["cleanup", "subscribe"]);
+    expect(mockThreadUnsubscribe).toHaveBeenCalledTimes(1);
+
+    release();
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("still cleans up on the server when the thread is not currently tracked locally", async () => {
+    const {
+      cleanupAndResyncThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-untracked-cleanup");
+
+    mockCleanupThreadOrphans.mockResolvedValue({
+      deletedActivities: 1,
+      deletedMessages: 0,
+      deletedProposedPlans: 0,
+    });
+
+    const outcome = await cleanupAndResyncThreadDetailSubscription(environmentId, threadId);
+
+    // No retainer, so resync cannot be issued; cleanup still runs.
+    expect(outcome).toEqual({
+      kind: "ok",
+      cleanup: { deletedActivities: 1, deletedMessages: 0, deletedProposedPlans: 0 },
+      resyncIssued: false,
+    });
+    expect(mockCleanupThreadOrphans).toHaveBeenCalledTimes(1);
+    expect(mockSubscribeThread).not.toHaveBeenCalled();
+
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("returns no-connection outcome when no environment connection exists yet", async () => {
+    const { cleanupAndResyncThreadDetailSubscription } = await import("./service");
+
+    // Note: we have NOT called startEnvironmentConnectionService, so no
+    // connection is registered for env-1.
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-disconnected");
+
+    const outcome = await cleanupAndResyncThreadDetailSubscription(environmentId, threadId);
+
+    expect(outcome).toEqual({ kind: "no-connection" });
+    expect(mockCleanupThreadOrphans).not.toHaveBeenCalled();
+    expect(mockSubscribeThread).not.toHaveBeenCalled();
+  });
+
+  it("does NOT resync when the cleanup RPC fails (so the broken snapshot is not re-applied)", async () => {
+    const {
+      cleanupAndResyncThreadDetailSubscription,
+      retainThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-cleanup-fail");
+
+    const release = retainThreadDetailSubscription(environmentId, threadId);
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+
+    mockCleanupThreadOrphans.mockRejectedValueOnce(new Error("db down"));
+
+    const outcome = await cleanupAndResyncThreadDetailSubscription(environmentId, threadId);
+
+    expect(outcome).toEqual({ kind: "error", message: "db down" });
+    // Subscribe count unchanged: no resync was triggered.
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+    expect(mockThreadUnsubscribe).not.toHaveBeenCalled();
+
+    release();
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+});

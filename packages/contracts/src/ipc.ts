@@ -43,6 +43,8 @@ import type {
 import type { ServerUpsertKeybindingInput } from "./server.ts";
 import type {
   ClientOrchestrationCommand,
+  OrchestrationCleanupThreadOrphansInput,
+  OrchestrationCleanupThreadOrphansResult,
   OrchestrationGetFullThreadDiffInput,
   OrchestrationGetFullThreadDiffResult,
   OrchestrationGetTurnDiffInput,
@@ -270,6 +272,9 @@ export interface EnvironmentApi {
     ) => () => void;
   };
   orchestration: {
+    cleanupThreadOrphans: (
+      input: OrchestrationCleanupThreadOrphansInput,
+    ) => Promise<OrchestrationCleanupThreadOrphansResult>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (
