@@ -6,7 +6,7 @@ export const EditorLaunchStyle = Schema.Literals([
   "goto",
   "line-column",
   "macos-open",
-  "macos-open-cwd-flag",
+  "ghostty-cli",
 ]);
 export type EditorLaunchStyle = typeof EditorLaunchStyle.Type;
 
@@ -39,7 +39,7 @@ export const EDITORS = [
     label: "Ghostty",
     commands: null,
     macosAppBundle: "Ghostty",
-    launchStyle: "macos-open-cwd-flag",
+    launchStyle: "ghostty-cli",
   },
   {
     id: "iterm2",
