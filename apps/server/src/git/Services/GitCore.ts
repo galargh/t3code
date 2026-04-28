@@ -217,10 +217,7 @@ export interface GitCoreShape {
   /**
    * Unset a Git config value in the local repository. Succeeds when the key is absent.
    */
-  readonly unsetConfigValue: (
-    cwd: string,
-    key: string,
-  ) => Effect.Effect<void, GitCommandError>;
+  readonly unsetConfigValue: (cwd: string, key: string) => Effect.Effect<void, GitCommandError>;
 
   /**
    * Determine whether the provided cwd is inside a git work tree.

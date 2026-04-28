@@ -87,7 +87,7 @@ import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import {
-  resyncThreadDetailSubscription,
+  cleanupAndResyncThreadDetailSubscription,
   retainThreadDetailSubscription,
 } from "../environments/runtime/service";
 
@@ -1905,19 +1905,53 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return;
       }
       if (clicked === "resync") {
-        const issued = resyncThreadDetailSubscription(thread.environmentId, thread.id);
+        const outcome = await cleanupAndResyncThreadDetailSubscription(
+          thread.environmentId,
+          thread.id,
+        );
+        if (outcome.kind === "no-connection") {
+          toastManager.add(
+            stackedThreadToast({
+              type: "warning",
+              title: "Not connected",
+              description: "Cannot resync — no live connection to the server for this environment.",
+            }),
+          );
+          return;
+        }
+        if (outcome.kind === "error") {
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Resync failed",
+              description: `Server-side cleanup failed: ${outcome.message}`,
+            }),
+          );
+          return;
+        }
+        const totalDeleted =
+          outcome.cleanup.deletedActivities +
+          outcome.cleanup.deletedMessages +
+          outcome.cleanup.deletedProposedPlans;
+        const cleanupSummary =
+          totalDeleted === 0
+            ? "No orphaned rows found on the server."
+            : `Removed ${totalDeleted} orphan row${totalDeleted === 1 ? "" : "s"} on the server (` +
+              `${outcome.cleanup.deletedActivities} activit${outcome.cleanup.deletedActivities === 1 ? "y" : "ies"}, ` +
+              `${outcome.cleanup.deletedMessages} message${outcome.cleanup.deletedMessages === 1 ? "" : "s"}, ` +
+              `${outcome.cleanup.deletedProposedPlans} proposed plan${outcome.cleanup.deletedProposedPlans === 1 ? "" : "s"}).`;
         toastManager.add(
           stackedThreadToast(
-            issued
+            outcome.resyncIssued
               ? {
                   type: "info",
                   title: "Resyncing thread",
-                  description: "Re-fetching server state for this thread.",
+                  description: `${cleanupSummary} Re-fetching server state.`,
                 }
               : {
-                  type: "warning",
-                  title: "Thread not active",
-                  description: "Open the thread first to resync it.",
+                  type: "info",
+                  title: "Cleaned up server state",
+                  description: `${cleanupSummary} Open the thread to load fresh state.`,
                 },
           ),
         );

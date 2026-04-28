@@ -43,6 +43,7 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       prUpdateBranch: rpcClient.git.prUpdateBranch,
     },
     orchestration: {
+      cleanupThreadOrphans: rpcClient.orchestration.cleanupThreadOrphans,
       dispatchCommand: rpcClient.orchestration.dispatchCommand,
       getTurnDiff: rpcClient.orchestration.getTurnDiff,
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,

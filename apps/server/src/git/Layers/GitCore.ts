@@ -1639,12 +1639,9 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
 
   const unsetConfigValue: GitCoreShape["unsetConfigValue"] = (cwd, key) =>
     // `git config --unset` exits 5 when the key is absent; treat that as success.
-    executeGit(
-      "GitCore.unsetConfigValue",
-      cwd,
-      ["config", "--local", "--unset", key],
-      { allowNonZeroExit: true },
-    ).pipe(
+    executeGit("GitCore.unsetConfigValue", cwd, ["config", "--local", "--unset", key], {
+      allowNonZeroExit: true,
+    }).pipe(
       Effect.flatMap((result) => {
         if (result.code === 0 || result.code === 5) {
           return Effect.void;

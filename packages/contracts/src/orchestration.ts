@@ -17,6 +17,7 @@ import {
 } from "./baseSchemas.ts";
 
 export const ORCHESTRATION_WS_METHODS = {
+  cleanupThreadOrphans: "orchestration.cleanupThreadOrphans",
   dispatchCommand: "orchestration.dispatchCommand",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
@@ -1165,7 +1166,39 @@ export type OrchestrationReplayEventsInput = typeof OrchestrationReplayEventsInp
 const OrchestrationReplayEventsResult = Schema.Array(OrchestrationEvent);
 export type OrchestrationReplayEventsResult = typeof OrchestrationReplayEventsResult.Type;
 
+/**
+ * Input for the per-thread server-side orphan cleanup.
+ *
+ * Targets a single thread by id and removes projection rows whose `turn_id`
+ * references a turn that no longer exists in `projection_turns` for that
+ * thread. Pure read-after-write resync is unable to repair these rows because
+ * they faithfully reflect the (broken) projection state — see the
+ * `Resync from server` action in the sidebar which calls cleanup before
+ * re-subscribing.
+ */
+export const OrchestrationCleanupThreadOrphansInput = Schema.Struct({
+  threadId: ThreadId,
+});
+export type OrchestrationCleanupThreadOrphansInput =
+  typeof OrchestrationCleanupThreadOrphansInput.Type;
+
+/**
+ * Result counts for the per-thread orphan cleanup. Each field is the number of
+ * projection rows that were dropped for that table.
+ */
+export const OrchestrationCleanupThreadOrphansResult = Schema.Struct({
+  deletedActivities: NonNegativeInt,
+  deletedMessages: NonNegativeInt,
+  deletedProposedPlans: NonNegativeInt,
+});
+export type OrchestrationCleanupThreadOrphansResult =
+  typeof OrchestrationCleanupThreadOrphansResult.Type;
+
 export const OrchestrationRpcSchemas = {
+  cleanupThreadOrphans: {
+    input: OrchestrationCleanupThreadOrphansInput,
+    output: OrchestrationCleanupThreadOrphansResult,
+  },
   dispatchCommand: {
     input: ClientOrchestrationCommand,
     output: DispatchResult,
@@ -1226,6 +1259,14 @@ export class OrchestrationGetFullThreadDiffError extends Schema.TaggedErrorClass
 
 export class OrchestrationReplayEventsError extends Schema.TaggedErrorClass<OrchestrationReplayEventsError>()(
   "OrchestrationReplayEventsError",
+  {
+    message: TrimmedNonEmptyString,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {}
+
+export class OrchestrationCleanupThreadOrphansError extends Schema.TaggedErrorClass<OrchestrationCleanupThreadOrphansError>()(
+  "OrchestrationCleanupThreadOrphansError",
   {
     message: TrimmedNonEmptyString,
     cause: Schema.optional(Schema.Defect),

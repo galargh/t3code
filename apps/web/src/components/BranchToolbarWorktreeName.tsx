@@ -74,11 +74,7 @@ export const BranchToolbarWorktreeName = memo(function BranchToolbarWorktreeName
         }
       >
         <span className="truncate">{displayName}</span>
-        {isCopied ? (
-          <CheckIcon className="size-3 text-success" />
-        ) : (
-          <CopyIcon className="size-3" />
-        )}
+        {isCopied ? <CheckIcon className="size-3 text-success" /> : <CopyIcon className="size-3" />}
       </TooltipTrigger>
       <TooltipPopup>
         <p>Copy worktree path</p>

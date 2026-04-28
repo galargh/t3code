@@ -48,6 +48,8 @@ import { KeybindingsConfigError } from "./keybindings.ts";
 import {
   ClientOrchestrationCommand,
   ORCHESTRATION_WS_METHODS,
+  OrchestrationCleanupThreadOrphansError,
+  OrchestrationCleanupThreadOrphansInput,
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetFullThreadDiffInput,
@@ -365,6 +367,15 @@ export const WsOrchestrationReplayEventsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.
   error: OrchestrationReplayEventsError,
 });
 
+export const WsOrchestrationCleanupThreadOrphansRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.cleanupThreadOrphans,
+  {
+    payload: OrchestrationCleanupThreadOrphansInput,
+    success: OrchestrationRpcSchemas.cleanupThreadOrphans.output,
+    error: OrchestrationCleanupThreadOrphansError,
+  },
+);
+
 export const WsOrchestrationSubscribeShellRpc = Rpc.make(ORCHESTRATION_WS_METHODS.subscribeShell, {
   payload: OrchestrationRpcSchemas.subscribeShell.input,
   success: OrchestrationRpcSchemas.subscribeShell.output,
@@ -445,6 +456,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
+  WsOrchestrationCleanupThreadOrphansRpc,
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,

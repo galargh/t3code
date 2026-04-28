@@ -1,6 +1,7 @@
 import {
   type AuthSessionRole,
   type EnvironmentId,
+  type OrchestrationCleanupThreadOrphansResult,
   type OrchestrationEvent,
   type OrchestrationShellSnapshot,
   type OrchestrationShellStreamEvent,
@@ -449,6 +450,62 @@ export function resyncThreadDetailSubscription(
   // reconnect re-attaches and pulls a fresh snapshot.
   watchThreadDetailSubscriptionConnection(entry);
   return false;
+}
+
+/**
+ * Outcome of {@link cleanupAndResyncThreadDetailSubscription}.
+ *
+ * - `kind: "ok"` — the server cleanup ran successfully. `cleanup` carries the
+ *   per-table delete counts; `resyncIssued` mirrors {@link resyncThreadDetailSubscription}.
+ * - `kind: "no-connection"` — no live websocket connection for the
+ *   environment, so the cleanup RPC could not be issued. The caller should
+ *   surface this to the user; the next subscribe will at least pull a fresh
+ *   snapshot once the connection comes back.
+ * - `kind: "error"` — the cleanup RPC was issued but the server returned an
+ *   error. We report the human message; the resync is intentionally NOT
+ *   performed because re-fetching the same broken snapshot is exactly what
+ *   the user is trying to avoid.
+ */
+export type CleanupAndResyncThreadDetailOutcome =
+  | {
+      readonly kind: "ok";
+      readonly cleanup: OrchestrationCleanupThreadOrphansResult;
+      readonly resyncIssued: boolean;
+    }
+  | { readonly kind: "no-connection" }
+  | { readonly kind: "error"; readonly message: string };
+
+/**
+ * Run the server-side per-thread orphan cleanup, then re-attach the
+ * subscription so the cleaned snapshot is delivered to the local store.
+ *
+ * The cleanup deletes projection rows whose `turn_id` no longer references a
+ * real turn (a class of state that pure resync cannot repair because the
+ * snapshot the server hands back faithfully reflects the broken table). After
+ * cleanup completes, the existing {@link resyncThreadDetailSubscription} flow
+ * re-fetches the snapshot, which now omits the orphans.
+ */
+export async function cleanupAndResyncThreadDetailSubscription(
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+): Promise<CleanupAndResyncThreadDetailOutcome> {
+  const connection = readEnvironmentConnection(environmentId);
+  if (!connection) {
+    return { kind: "no-connection" };
+  }
+
+  let cleanup: OrchestrationCleanupThreadOrphansResult;
+  try {
+    cleanup = await connection.client.orchestration.cleanupThreadOrphans({ threadId });
+  } catch (error) {
+    return {
+      kind: "error",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  const resyncIssued = resyncThreadDetailSubscription(environmentId, threadId);
+  return { kind: "ok", cleanup, resyncIssued };
 }
 
 export function retainThreadDetailSubscription(

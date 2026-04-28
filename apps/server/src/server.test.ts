@@ -71,6 +71,10 @@ import {
 } from "./orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationListenerCallbackError } from "./orchestration/Errors.ts";
 import {
+  OrchestrationThreadCleanup,
+  type OrchestrationThreadCleanupShape,
+} from "./orchestration/Services/OrchestrationThreadCleanup.ts";
+import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
 } from "./orchestration/Services/ProjectionSnapshotQuery.ts";
@@ -328,6 +332,7 @@ const buildAppUnderTest = (options?: {
     projectSetupScriptRunner?: Partial<ProjectSetupScriptRunnerShape>;
     terminalManager?: Partial<TerminalManagerShape>;
     orchestrationEngine?: Partial<OrchestrationEngineShape>;
+    orchestrationThreadCleanup?: Partial<OrchestrationThreadCleanupShape>;
     projectionSnapshotQuery?: Partial<ProjectionSnapshotQueryShape>;
     checkpointDiffQuery?: Partial<CheckpointDiffQueryShape>;
     browserTraceCollector?: Partial<BrowserTraceCollectorShape>;
@@ -480,6 +485,17 @@ const buildAppUnderTest = (options?: {
           getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
           getThreadCheckpointContext: () => Effect.succeed(Option.none()),
           ...options?.layers?.projectionSnapshotQuery,
+        }),
+      ),
+      Layer.provide(
+        Layer.mock(OrchestrationThreadCleanup)({
+          cleanupThreadOrphans: () =>
+            Effect.succeed({
+              deletedActivities: 0,
+              deletedMessages: 0,
+              deletedProposedPlans: 0,
+            }),
+          ...options?.layers?.orchestrationThreadCleanup,
         }),
       ),
       Layer.provide(

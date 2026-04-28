@@ -329,8 +329,7 @@ export function resolveDefaultBranchActionDialogCopy(input: {
     };
   }
 
-  const isDraft =
-    input.action === "create_draft_pr" || input.action === "commit_push_draft_pr";
+  const isDraft = input.action === "create_draft_pr" || input.action === "commit_push_draft_pr";
   const prLabel = isDraft ? "draft PR" : "PR";
   const prContinueLabel = isDraft ? "create draft PR" : "create PR";
 
