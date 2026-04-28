@@ -1885,7 +1885,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         [
           { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
-          { id: "resync", label: "Resync from server" },
+          { id: "resync", label: "Repair thread" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
           { id: "delete", label: "Delete", destructive: true },
@@ -1914,7 +1914,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             stackedThreadToast({
               type: "warning",
               title: "Not connected",
-              description: "Cannot resync — no live connection to the server for this environment.",
+              description: "Cannot repair — no live connection to the server for this environment.",
             }),
           );
           return;
@@ -1923,7 +1923,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           toastManager.add(
             stackedThreadToast({
               type: "error",
-              title: "Resync failed",
+              title: "Repair failed",
               description: `Server-side cleanup failed: ${outcome.message}`,
             }),
           );
@@ -1945,7 +1945,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             outcome.resyncIssued
               ? {
                   type: "info",
-                  title: "Resyncing thread",
+                  title: "Repairing thread",
                   description: `${cleanupSummary} Re-fetching server state.`,
                 }
               : {
