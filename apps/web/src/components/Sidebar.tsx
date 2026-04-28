@@ -86,7 +86,10 @@ import { useGitStatus } from "../lib/gitStatusState";
 import { readLocalApi } from "../localApi";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
-import { retainThreadDetailSubscription } from "../environments/runtime/service";
+import {
+  resyncThreadDetailSubscription,
+  retainThreadDetailSubscription,
+} from "../environments/runtime/service";
 
 import { useThreadActions } from "../hooks/useThreadActions";
 import {
@@ -1882,6 +1885,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         [
           { id: "rename", label: "Rename thread" },
           { id: "mark-unread", label: "Mark unread" },
+          { id: "resync", label: "Resync from server" },
           { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
           { id: "delete", label: "Delete", destructive: true },
@@ -1898,6 +1902,25 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       if (clicked === "mark-unread") {
         markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+        return;
+      }
+      if (clicked === "resync") {
+        const issued = resyncThreadDetailSubscription(thread.environmentId, thread.id);
+        toastManager.add(
+          stackedThreadToast(
+            issued
+              ? {
+                  type: "info",
+                  title: "Resyncing thread",
+                  description: "Re-fetching server state for this thread.",
+                }
+              : {
+                  type: "warning",
+                  title: "Thread not active",
+                  description: "Open the thread first to resync it.",
+                },
+          ),
+        );
         return;
       }
       if (clicked === "copy-path") {
