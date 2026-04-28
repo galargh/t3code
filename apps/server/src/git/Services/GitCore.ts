@@ -206,6 +206,23 @@ export interface GitCoreShape {
   ) => Effect.Effect<string | null, GitCommandError>;
 
   /**
+   * Set a Git config value in the local repository.
+   */
+  readonly setConfigValue: (
+    cwd: string,
+    key: string,
+    value: string,
+  ) => Effect.Effect<void, GitCommandError>;
+
+  /**
+   * Unset a Git config value in the local repository. Succeeds when the key is absent.
+   */
+  readonly unsetConfigValue: (
+    cwd: string,
+    key: string,
+  ) => Effect.Effect<void, GitCommandError>;
+
+  /**
    * Determine whether the provided cwd is inside a git work tree.
    */
   readonly isInsideWorkTree: (cwd: string) => Effect.Effect<boolean, GitCommandError>;

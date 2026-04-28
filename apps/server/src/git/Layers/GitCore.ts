@@ -1634,6 +1634,33 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
       Effect.map((trimmed) => (trimmed.length > 0 ? trimmed : null)),
     );
 
+  const setConfigValue: GitCoreShape["setConfigValue"] = (cwd, key, value) =>
+    runGit("GitCore.setConfigValue", cwd, ["config", "--local", key, value]);
+
+  const unsetConfigValue: GitCoreShape["unsetConfigValue"] = (cwd, key) =>
+    // `git config --unset` exits 5 when the key is absent; treat that as success.
+    executeGit(
+      "GitCore.unsetConfigValue",
+      cwd,
+      ["config", "--local", "--unset", key],
+      { allowNonZeroExit: true },
+    ).pipe(
+      Effect.flatMap((result) => {
+        if (result.code === 0 || result.code === 5) {
+          return Effect.void;
+        }
+        const stderr = result.stderr.trim();
+        return Effect.fail(
+          createGitCommandError(
+            "GitCore.unsetConfigValue",
+            cwd,
+            ["config", "--local", "--unset", key],
+            stderr.length > 0 ? stderr : `git config --unset failed: code=${result.code ?? "null"}`,
+          ),
+        );
+      }),
+    );
+
   const isInsideWorkTree: GitCoreShape["isInsideWorkTree"] = (cwd) =>
     executeGit("GitCore.isInsideWorkTree", cwd, ["rev-parse", "--is-inside-work-tree"], {
       allowNonZeroExit: true,
@@ -2185,6 +2212,8 @@ export const makeGitCore = Effect.fn("makeGitCore")(function* (options?: {
     pullCurrentBranch,
     readRangeContext,
     readConfigValue,
+    setConfigValue,
+    unsetConfigValue,
     isInsideWorkTree,
     listWorkspaceFiles,
     filterIgnoredPaths,

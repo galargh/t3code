@@ -57,6 +57,23 @@ const SHORT_SHA_LENGTH = 7;
 const TOAST_DESCRIPTION_MAX = 72;
 const STATUS_RESULT_CACHE_TTL = Duration.seconds(1);
 const STATUS_RESULT_CACHE_CAPACITY = 2_048;
+
+/**
+ * Branch-scoped git config key used to remember the GitHub PR number this
+ * branch was checked out for. Lets `findLatestPr` resolve the PR by number
+ * instead of relying on `gh pr list --head <selector>` heuristics that can
+ * fail when upstream tracking is missing or the local branch was renamed
+ * (e.g. fork PRs become `t3code/pr-<N>/<headBranch>`).
+ */
+const branchPullRequestNumberConfigKey = (branch: string) => `branch.${branch}.t3code-pr-number`;
+
+/**
+ * Branch-scoped git config key paired with `branchPullRequestNumberConfigKey`
+ * to record which repository the PR lives in. Used as a sanity check when
+ * resolving the PR by number from a worktree.
+ */
+const branchPullRequestRepositoryConfigKey = (branch: string) =>
+  `branch.${branch}.t3code-pr-repository`;
 type StripProgressContext<T> = T extends any ? Omit<T, "actionId" | "cwd" | "action"> : never;
 type GitActionProgressPayload = StripProgressContext<GitActionProgressEvent>;
 type GitActionProgressEmitter = (event: GitActionProgressPayload) => Effect.Effect<void, never>;
@@ -853,10 +870,49 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     return null;
   });
 
+  /**
+   * Shortcut path: if the branch was checked out via the PR-checkout flow
+   * (`preparePullRequestThread`), it carries `branch.<name>.t3code-pr-number`
+   * in git config. Resolve that PR by number directly so View PR appears
+   * deterministically — no dependency on upstream tracking, local branch
+   * naming, or `gh pr list --head <selector>` heuristics.
+   *
+   * Returns null when the metadata is absent or the lookup fails for any
+   * reason; callers fall back to the heuristic path.
+   */
+  const findPullRequestByBranchMetadata = Effect.fn("findPullRequestByBranchMetadata")(function* (
+    cwd: string,
+    branch: string,
+  ) {
+    const recordedNumberRaw = yield* readConfigValueNullable(
+      cwd,
+      branchPullRequestNumberConfigKey(branch),
+    );
+    const recordedNumber = recordedNumberRaw ? Number.parseInt(recordedNumberRaw, 10) : NaN;
+    if (!Number.isFinite(recordedNumber) || recordedNumber <= 0) {
+      return null;
+    }
+
+    const summary = yield* gitHubCli
+      .getPullRequest({ cwd, reference: String(recordedNumber) })
+      .pipe(Effect.option);
+
+    if (Option.isNone(summary)) {
+      return null;
+    }
+
+    return toPullRequestInfo(summary.value);
+  });
+
   const findLatestPr = Effect.fn("findLatestPr")(function* (
     cwd: string,
     details: { branch: string; upstreamRef: string | null },
   ) {
+    const shortcut = yield* findPullRequestByBranchMetadata(cwd, details.branch);
+    if (shortcut) {
+      return shortcut;
+    }
+
     const headContext = yield* resolveBranchHeadContext(cwd, details);
     const parsedByNumber = new Map<number, PullRequestInfo>();
 
@@ -1340,6 +1396,39 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     },
   );
 
+  /**
+   * Best-effort recording of `branch.<name>.t3code-pr-{number,repository}` so
+   * the View PR menu can later resolve the PR by number without depending on
+   * upstream tracking or `gh pr list --head <selector>` heuristics. Failures
+   * are logged and swallowed — the heuristic path remains as a fallback.
+   */
+  const recordPullRequestBranchMetadata = (
+    cwd: string,
+    branch: string,
+    pullRequest: ResolvedPullRequest & PullRequestHeadRemoteInfo,
+  ) =>
+    Effect.gen(function* () {
+      yield* gitCore.setConfigValue(
+        cwd,
+        branchPullRequestNumberConfigKey(branch),
+        String(pullRequest.number),
+      );
+      const headRepository = resolveHeadRepositoryNameWithOwner(pullRequest);
+      if (headRepository) {
+        yield* gitCore.setConfigValue(
+          cwd,
+          branchPullRequestRepositoryConfigKey(branch),
+          headRepository,
+        );
+      }
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning(
+          `GitManager.recordPullRequestBranchMetadata: failed to record PR #${pullRequest.number} for ${branch} in ${cwd}: ${error.message}`,
+        ).pipe(Effect.asVoid),
+      ),
+    );
+
   const preparePullRequestThread: GitManagerShape["preparePullRequestThread"] = Effect.fn(
     "preparePullRequestThread",
   )(function* (input) {
@@ -1369,6 +1458,10 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         reference: normalizedReference,
       });
       const pullRequest = toResolvedPullRequest(pullRequestSummary);
+      const pullRequestWithRemoteInfo = {
+        ...pullRequest,
+        ...toPullRequestHeadRemoteInfo(pullRequestSummary),
+      } as const;
 
       if (input.mode === "local") {
         yield* gitHubCli.checkoutPullRequest({
@@ -1377,17 +1470,16 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
           force: true,
         });
         const details = yield* gitCore.statusDetails(input.cwd);
+        const localBranch = details.branch ?? pullRequest.headBranch;
         yield* configurePullRequestHeadUpstream(
           input.cwd,
-          {
-            ...pullRequest,
-            ...toPullRequestHeadRemoteInfo(pullRequestSummary),
-          },
-          details.branch ?? pullRequest.headBranch,
+          pullRequestWithRemoteInfo,
+          localBranch,
         );
+        yield* recordPullRequestBranchMetadata(input.cwd, localBranch, pullRequestWithRemoteInfo);
         return {
           pullRequest,
-          branch: details.branch ?? pullRequest.headBranch,
+          branch: localBranch,
           worktreePath: null,
         };
       }
@@ -1396,20 +1488,19 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         worktreePath: string,
       ) {
         const details = yield* gitCore.statusDetails(worktreePath);
+        const localBranch = details.branch ?? pullRequest.headBranch;
         yield* configurePullRequestHeadUpstream(
           worktreePath,
-          {
-            ...pullRequest,
-            ...toPullRequestHeadRemoteInfo(pullRequestSummary),
-          },
-          details.branch ?? pullRequest.headBranch,
+          pullRequestWithRemoteInfo,
+          localBranch,
+        );
+        yield* recordPullRequestBranchMetadata(
+          worktreePath,
+          localBranch,
+          pullRequestWithRemoteInfo,
         );
       });
 
-      const pullRequestWithRemoteInfo = {
-        ...pullRequest,
-        ...toPullRequestHeadRemoteInfo(pullRequestSummary),
-      } as const;
       const localPullRequestBranch =
         resolvePullRequestWorktreeLocalBranchName(pullRequestWithRemoteInfo);
 
@@ -1500,7 +1591,17 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
         branch: worktree.worktree.branch,
         worktreePath: worktree.worktree.path,
       };
-    }).pipe(Effect.ensuring(invalidateStatus(input.cwd)));
+    }).pipe(
+      // Invalidate the worktree's cached status on success so the next poll
+      // picks up the freshly-recorded PR metadata immediately, rather than
+      // waiting out a cache entry populated before metadata was written.
+      Effect.tap((result) =>
+        result.worktreePath
+          ? invalidateStatus(canonicalizeExistingPath(result.worktreePath))
+          : Effect.void,
+      ),
+      Effect.ensuring(invalidateStatus(input.cwd)),
+    );
   });
 
   const runFeatureBranchStep = Effect.fn("runFeatureBranchStep")(function* (
