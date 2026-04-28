@@ -7,6 +7,8 @@ import type {
   GitPullRequestChecksResult,
   GitPullRequestCommentsResult,
   GitPullRequestDetailResult,
+  GitPullRequestDisableAutoMergeInput,
+  GitPullRequestDisableAutoMergeResult,
   GitPullRequestForCwdInput,
   GitPullRequestMergeInput,
   GitPullRequestMergeResult,
@@ -281,6 +283,9 @@ export interface EnvironmentApi {
     prUpdateBranch: (
       input: GitPullRequestUpdateBranchInput,
     ) => Promise<GitPullRequestUpdateBranchResult>;
+    prDisableAutoMerge: (
+      input: GitPullRequestDisableAutoMergeInput,
+    ) => Promise<GitPullRequestDisableAutoMergeResult>;
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     refreshStatus: (input: GitStatusInput) => Promise<GitStatusResult>;
     onStatus: (

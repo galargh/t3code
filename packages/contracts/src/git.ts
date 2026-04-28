@@ -465,6 +465,18 @@ export const GitPrAuthor = Schema.Struct({
 });
 export type GitPrAuthor = typeof GitPrAuthor.Type;
 
+export const GitPrMergeMethod = Schema.Literals(["merge", "squash", "rebase"]);
+export type GitPrMergeMethod = typeof GitPrMergeMethod.Type;
+
+export const GitPrAutoMergeRequest = Schema.Struct({
+  mergeMethod: GitPrMergeMethod,
+  enabledAt: Schema.NullOr(Schema.String),
+  enabledBy: Schema.Struct({
+    login: TrimmedNonEmptyStringSchema,
+  }),
+});
+export type GitPrAutoMergeRequest = typeof GitPrAutoMergeRequest.Type;
+
 export const GitPullRequestDetail = Schema.Struct({
   number: PositiveInt,
   url: Schema.String,
@@ -478,6 +490,7 @@ export const GitPullRequestDetail = Schema.Struct({
   headRefName: TrimmedNonEmptyStringSchema,
   author: GitPrAuthor,
   reviewDecision: GitPrReviewDecision,
+  autoMergeRequest: Schema.NullOr(GitPrAutoMergeRequest),
 });
 export type GitPullRequestDetail = typeof GitPullRequestDetail.Type;
 
@@ -561,9 +574,6 @@ export const GitPullRequestDetailResult = Schema.Struct({
 });
 export type GitPullRequestDetailResult = typeof GitPullRequestDetailResult.Type;
 
-export const GitPrMergeMethod = Schema.Literals(["merge", "squash", "rebase"]);
-export type GitPrMergeMethod = typeof GitPrMergeMethod.Type;
-
 export const GitPullRequestMergeInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   prNumber: PositiveInt,
@@ -613,3 +623,16 @@ export const GitPullRequestUpdateBranchResult = Schema.Struct({
   prNumber: PositiveInt,
 });
 export type GitPullRequestUpdateBranchResult = typeof GitPullRequestUpdateBranchResult.Type;
+
+export const GitPullRequestDisableAutoMergeInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  prNumber: PositiveInt,
+});
+export type GitPullRequestDisableAutoMergeInput =
+  typeof GitPullRequestDisableAutoMergeInput.Type;
+
+export const GitPullRequestDisableAutoMergeResult = Schema.Struct({
+  prNumber: PositiveInt,
+});
+export type GitPullRequestDisableAutoMergeResult =
+  typeof GitPullRequestDisableAutoMergeResult.Type;

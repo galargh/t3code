@@ -41,6 +41,7 @@ export function createEnvironmentApi(rpcClient: WsRpcClient): EnvironmentApi {
       prMerge: rpcClient.git.prMerge,
       prRerunChecks: rpcClient.git.prRerunChecks,
       prUpdateBranch: rpcClient.git.prUpdateBranch,
+      prDisableAutoMerge: rpcClient.git.prDisableAutoMerge,
     },
     orchestration: {
       cleanupThreadOrphans: rpcClient.orchestration.cleanupThreadOrphans,

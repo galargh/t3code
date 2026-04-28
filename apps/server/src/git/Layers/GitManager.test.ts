@@ -632,6 +632,13 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             detail: "fake gh: updatePullRequestBranch not implemented in this scenario",
           }),
         ),
+      disablePullRequestAutoMerge: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "disablePullRequestAutoMerge",
+            detail: "fake gh: disablePullRequestAutoMerge not implemented in this scenario",
+          }),
+        ),
     },
     ghCalls,
   };

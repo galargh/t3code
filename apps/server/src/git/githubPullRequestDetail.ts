@@ -5,11 +5,16 @@
  * - state (open/closed/merged) is derived from the upstream `state` + `mergedAt`.
  * - mergeable / mergeStateStatus default to "UNKNOWN" when missing.
  * - reviewDecision is null when unset.
+ * - autoMergeRequest is null when auto-merge is not enabled. When enabled,
+ *   GitHub returns the merge method UPPERCASE (e.g. SQUASH) which we lowercase
+ *   to match `GitPrMergeMethod`.
  *
  * @module githubPullRequestDetail
  */
 import { Cause, Result, Schema } from "effect";
 import type {
+  GitPrAutoMergeRequest,
+  GitPrMergeMethod,
   GitPrMergeStateStatus,
   GitPrMergeable,
   GitPrReviewDecision,
@@ -21,6 +26,20 @@ const RawAuthorSchema = Schema.NullOr(
   Schema.Struct({
     login: Schema.optional(Schema.NullOr(Schema.String)),
     name: Schema.optional(Schema.NullOr(Schema.String)),
+  }),
+);
+
+const RawAutoMergeRequestSchema = Schema.NullOr(
+  Schema.Struct({
+    mergeMethod: Schema.optional(Schema.NullOr(Schema.String)),
+    enabledAt: Schema.optional(Schema.NullOr(Schema.String)),
+    enabledBy: Schema.optional(
+      Schema.NullOr(
+        Schema.Struct({
+          login: Schema.optional(Schema.NullOr(Schema.String)),
+        }),
+      ),
+    ),
   }),
 );
 
@@ -38,6 +57,7 @@ const RawDetailSchema = Schema.Struct({
   headRefName: Schema.String,
   author: Schema.optional(RawAuthorSchema),
   reviewDecision: Schema.optional(Schema.NullOr(Schema.String)),
+  autoMergeRequest: Schema.optional(RawAutoMergeRequestSchema),
 });
 
 const VALID_MERGE_STATE_STATUS: ReadonlySet<GitPrMergeStateStatus> = new Set<GitPrMergeStateStatus>(
@@ -55,6 +75,12 @@ const VALID_REVIEW_DECISION = new Set<NonNullable<GitPrReviewDecision>>([
   "CHANGES_REQUESTED",
   "REVIEW_REQUIRED",
   "COMMENTED",
+]);
+
+const VALID_MERGE_METHOD: ReadonlySet<GitPrMergeMethod> = new Set<GitPrMergeMethod>([
+  "merge",
+  "squash",
+  "rebase",
 ]);
 
 function trimOrEmpty(value: string | null | undefined): string {
@@ -90,6 +116,27 @@ function normalizeReviewDecision(value: string | null | undefined): GitPrReviewD
   return null;
 }
 
+function normalizeMergeMethod(value: string | null | undefined): GitPrMergeMethod | null {
+  const lower = trimOrEmpty(value).toLowerCase() as GitPrMergeMethod;
+  return VALID_MERGE_METHOD.has(lower) ? lower : null;
+}
+
+function normalizeAutoMergeRequest(
+  raw: Schema.Schema.Type<typeof RawAutoMergeRequestSchema>,
+): GitPrAutoMergeRequest | null {
+  if (raw === null || raw === undefined) return null;
+  const mergeMethod = normalizeMergeMethod(raw.mergeMethod);
+  if (mergeMethod === null) return null;
+  const enabledByLogin = trimOrEmpty(raw.enabledBy?.login);
+  return {
+    mergeMethod,
+    enabledAt: trimOrEmpty(raw.enabledAt).length > 0 ? raw.enabledAt!.trim() : null,
+    enabledBy: {
+      login: enabledByLogin.length > 0 ? enabledByLogin : "ghost",
+    },
+  };
+}
+
 function normalize(raw: Schema.Schema.Type<typeof RawDetailSchema>): GitPullRequestDetail {
   const login = trimOrEmpty(raw.author?.login);
   return {
@@ -108,6 +155,7 @@ function normalize(raw: Schema.Schema.Type<typeof RawDetailSchema>): GitPullRequ
       name: trimOrEmpty(raw.author?.name).length > 0 ? raw.author!.name!.trim() : null,
     },
     reviewDecision: normalizeReviewDecision(raw.reviewDecision),
+    autoMergeRequest: normalizeAutoMergeRequest(raw.autoMergeRequest ?? null),
   };
 }
 

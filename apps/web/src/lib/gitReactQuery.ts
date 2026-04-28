@@ -55,6 +55,12 @@ export const gitMutationKeys = {
     cwd: string | null,
     prNumber: number | null,
   ) => ["git", "mutation", "pr-update-branch", environmentId ?? null, cwd, prNumber] as const,
+  prDisableAutoMerge: (
+    environmentId: EnvironmentId | null,
+    cwd: string | null,
+    prNumber: number | null,
+  ) =>
+    ["git", "mutation", "pr-disable-auto-merge", environmentId ?? null, cwd, prNumber] as const,
 };
 
 export function invalidateGitQueries(
@@ -473,6 +479,32 @@ export function prUpdateBranchMutationOptions(input: {
       }
       const api = ensureEnvironmentApi(input.environmentId);
       return api.git.prUpdateBranch({ cwd: input.cwd, prNumber: input.prNumber });
+    },
+    onSuccess: async () => {
+      await invalidatePrQueries({
+        queryClient: input.queryClient,
+        environmentId: input.environmentId,
+        cwd: input.cwd,
+        prNumber: input.prNumber,
+      });
+    },
+  });
+}
+
+export function prDisableAutoMergeMutationOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.prDisableAutoMerge(input.environmentId, input.cwd, input.prNumber),
+    mutationFn: async () => {
+      if (!input.environmentId || !input.cwd || input.prNumber === null) {
+        throw new Error("PR disable-auto-merge is unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prDisableAutoMerge({ cwd: input.cwd, prNumber: input.prNumber });
     },
     onSuccess: async () => {
       await invalidatePrQueries({

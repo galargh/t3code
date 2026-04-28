@@ -17,6 +17,7 @@ describe("decodeGitHubPullRequestDetailJson", () => {
       headRefName: "feat/x",
       author: { login: "alice", name: "Alice" },
       reviewDecision: "APPROVED",
+      autoMergeRequest: null,
     });
 
     const result = decodeGitHubPullRequestDetailJson(raw);
@@ -35,7 +36,49 @@ describe("decodeGitHubPullRequestDetailJson", () => {
       headRefName: "feat/x",
       author: { login: "alice", name: "Alice" },
       reviewDecision: "APPROVED",
+      autoMergeRequest: null,
     });
+  });
+
+  it("normalizes a queued auto-merge request (lowercases mergeMethod, defaults missing login)", () => {
+    const raw = JSON.stringify({
+      number: 42,
+      title: "Queued PR",
+      body: null,
+      state: "OPEN",
+      baseRefName: "main",
+      headRefName: "feat/x",
+      author: { login: "alice" },
+      autoMergeRequest: {
+        mergeMethod: "SQUASH",
+        enabledAt: "2026-04-28T12:00:00Z",
+        enabledBy: { login: "alice" },
+      },
+    });
+
+    const result = decodeGitHubPullRequestDetailJson(raw);
+    expect(Result.isSuccess(result)).toBe(true);
+    if (!Result.isSuccess(result)) return;
+    expect(result.success.autoMergeRequest).toEqual({
+      mergeMethod: "squash",
+      enabledAt: "2026-04-28T12:00:00Z",
+      enabledBy: { login: "alice" },
+    });
+  });
+
+  it("treats an unknown mergeMethod as no auto-merge", () => {
+    const raw = JSON.stringify({
+      number: 42,
+      title: "Bad",
+      baseRefName: "main",
+      headRefName: "feat/x",
+      autoMergeRequest: { mergeMethod: "TELEPORT", enabledBy: { login: "alice" } },
+    });
+
+    const result = decodeGitHubPullRequestDetailJson(raw);
+    expect(Result.isSuccess(result)).toBe(true);
+    if (!Result.isSuccess(result)) return;
+    expect(result.success.autoMergeRequest).toBeNull();
   });
 
   it("derives merged state from mergedAt", () => {

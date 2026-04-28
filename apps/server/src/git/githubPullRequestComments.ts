@@ -1,14 +1,19 @@
 /**
- * Decoder for `gh pr view <n> --comments --json comments,reviews,reviewThreads`.
+ * Decoder for the combined PR comments wrapper.
  *
- * Flattens the three sources gh exposes (issue comments, top-level reviews,
- * and review threads) into a single chronologically-sorted
+ * `gh pr view --json` only exposes `comments` (issue comments) and `reviews`
+ * (top-level review summaries). Inline review-thread comments — the ones with
+ * file/line + resolved state — are only available via the GraphQL
+ * `PullRequest.reviewThreads` connection. The GitHubCli layer fetches both
+ * and assembles the wrapper before calling this decoder.
+ *
+ * Flattens the three sources into a single chronologically-sorted
  * `GitPullRequestComment[]` keyed by id, with file/line metadata preserved
  * for review-thread comments.
  *
  * @module githubPullRequestComments
  */
-import { Cause, Result, Schema } from "effect";
+import { Cause, Exit, Result, Schema } from "effect";
 import type { GitPrCommentKind, GitPullRequestComment } from "@t3tools/contracts";
 import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson";
 
@@ -215,16 +220,32 @@ function flatten(raw: Schema.Schema.Type<typeof RawWrapperSchema>): GitPullReque
   return out.toSorted(compareByCreatedAt);
 }
 
-const decodeWrapper = decodeJsonResult(RawWrapperSchema);
+const decodeWrapperJson = decodeJsonResult(RawWrapperSchema);
+const decodeWrapperUnknown = Schema.decodeUnknownExit(RawWrapperSchema);
 
 export const formatGitHubPullRequestCommentsDecodeError = formatSchemaError;
 
 export function decodeGitHubPullRequestCommentsJson(
   raw: string,
 ): Result.Result<ReadonlyArray<GitPullRequestComment>, Cause.Cause<Schema.SchemaError>> {
-  const result = decodeWrapper(raw);
+  const result = decodeWrapperJson(raw);
   if (!Result.isSuccess(result)) {
     return Result.fail(result.failure);
   }
   return Result.succeed(flatten(result.success));
+}
+
+/**
+ * Decode an already-parsed wrapper (used when the caller assembles the wrapper
+ * from multiple `gh` calls — e.g. issue comments + reviews from `gh pr view`
+ * combined with review threads from `gh api graphql`).
+ */
+export function decodeGitHubPullRequestCommentsObject(
+  raw: unknown,
+): Result.Result<ReadonlyArray<GitPullRequestComment>, Cause.Cause<Schema.SchemaError>> {
+  const result = decodeWrapperUnknown(raw);
+  if (Exit.isFailure(result)) {
+    return Result.fail(result.cause);
+  }
+  return Result.succeed(flatten(result.value));
 }

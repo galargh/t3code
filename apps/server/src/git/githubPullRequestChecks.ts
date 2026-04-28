@@ -1,7 +1,13 @@
 /**
- * Decoder for `gh pr checks <n> --json name,status,conclusion,workflow,detailsUrl,bucket`.
+ * Decoder for `gh pr checks <n> --json name,state,bucket,workflow,link`.
  *
- * Includes `extractWorkflowRunId(detailsUrl)` which parses the GitHub Actions
+ * The `gh` CLI returns a single `state` field per check that conflates the old
+ * GitHub `status` (QUEUED / IN_PROGRESS / COMPLETED / WAITING / PENDING / REQUESTED)
+ * and `conclusion` (SUCCESS / FAILURE / NEUTRAL / CANCELLED / SKIPPED / TIMED_OUT /
+ * ACTION_REQUIRED / STALE) values. We split it back into our internal
+ * `{ status, conclusion }` representation so the UI keeps its existing icons.
+ *
+ * Also includes `extractWorkflowRunId(link)` which parses the GitHub Actions
  * URL `…/actions/runs/<runId>[/job/<jobId>]` so the UI can wire per-check
  * "Rerun" actions to `gh run rerun --job <jobId>` or `gh run rerun <runId>`
  * without an extra API round-trip.
@@ -19,10 +25,9 @@ import { decodeJsonResult, formatSchemaError } from "@t3tools/shared/schemaJson"
 
 const RawCheckSchema = Schema.Struct({
   name: Schema.optional(Schema.NullOr(Schema.String)),
-  status: Schema.optional(Schema.NullOr(Schema.String)),
-  conclusion: Schema.optional(Schema.NullOr(Schema.String)),
+  state: Schema.optional(Schema.NullOr(Schema.String)),
   workflow: Schema.optional(Schema.NullOr(Schema.String)),
-  detailsUrl: Schema.optional(Schema.NullOr(Schema.String)),
+  link: Schema.optional(Schema.NullOr(Schema.String)),
   bucket: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
@@ -64,13 +69,28 @@ function normalizeStatus(value: string | null | undefined): GitPrCheckStatus {
   return "PENDING";
 }
 
-function normalizeConclusion(value: string | null | undefined): GitPrCheckConclusion {
+/**
+ * Map the `state` field returned by `gh pr checks --json state` back into our
+ * internal `{ status, conclusion }` representation. `gh` collapses both into a
+ * single value: terminal states (SUCCESS / FAILURE / …) imply a COMPLETED
+ * status with the matching conclusion; non-terminal states (QUEUED /
+ * IN_PROGRESS / …) carry a status with no conclusion yet.
+ */
+function splitState(value: string | null | undefined): {
+  status: GitPrCheckStatus;
+  conclusion: GitPrCheckConclusion;
+} {
   const upper = trimOrEmpty(value).toUpperCase().replaceAll("-", "_");
-  if (upper.length === 0) return null;
   if (VALID_CONCLUSION.has(upper as NonNullable<GitPrCheckConclusion>)) {
-    return upper as NonNullable<GitPrCheckConclusion>;
+    return {
+      status: "COMPLETED",
+      conclusion: upper as NonNullable<GitPrCheckConclusion>,
+    };
   }
-  return null;
+  return {
+    status: normalizeStatus(upper),
+    conclusion: null,
+  };
 }
 
 function normalizeBucket(
@@ -122,10 +142,9 @@ function normalize(raw: Schema.Schema.Type<typeof RawCheckSchema>): GitPullReque
   if (name.length === 0) {
     return null;
   }
-  const status = normalizeStatus(raw.status);
-  const conclusion = normalizeConclusion(raw.conclusion);
+  const { status, conclusion } = splitState(raw.state);
   const bucket = normalizeBucket(raw.bucket, conclusion, status);
-  const detailsUrl = nullIfEmpty(trimOrEmpty(raw.detailsUrl));
+  const detailsUrl = nullIfEmpty(trimOrEmpty(raw.link));
   const { workflowRunId, jobId } = extractWorkflowRunId(detailsUrl);
   return {
     name,
