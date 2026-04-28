@@ -5,6 +5,7 @@ import { FileSystem, Path, Effect } from "effect";
 
 import {
   isCommandAvailable,
+  isMacosAppInstalled,
   launchDetached,
   resolveAvailableEditors,
   resolveEditorLaunch,
@@ -241,6 +242,50 @@ it.layer(NodeServices.layer)("resolveEditorLaunch", (it) => {
     }),
   );
 
+  it.effect("maps macOS terminal editors to `open` invocations", () =>
+    Effect.gen(function* () {
+      const itermLaunch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "iterm2" },
+        "darwin",
+        { PATH: "" },
+      );
+      assert.deepEqual(itermLaunch, {
+        command: "open",
+        args: ["-a", "iTerm", "/tmp/workspace"],
+      });
+
+      const terminalLaunch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "terminal" },
+        "darwin",
+        { PATH: "" },
+      );
+      assert.deepEqual(terminalLaunch, {
+        command: "open",
+        args: ["-a", "Terminal", "/tmp/workspace"],
+      });
+
+      const warpLaunch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "warp" },
+        "darwin",
+        { PATH: "" },
+      );
+      assert.deepEqual(warpLaunch, {
+        command: "open",
+        args: ["-a", "Warp", "/tmp/workspace"],
+      });
+
+      const ghosttyLaunch = yield* resolveEditorLaunch(
+        { cwd: "/tmp/workspace", editor: "ghostty" },
+        "darwin",
+        { PATH: "" },
+      );
+      assert.deepEqual(ghosttyLaunch, {
+        command: "open",
+        args: ["-na", "Ghostty", "--args", "--working-directory=/tmp/workspace"],
+      });
+    }),
+  );
+
   it.effect("maps file-manager editor to OS open commands", () =>
     Effect.gen(function* () {
       const launch1 = yield* resolveEditorLaunch(
@@ -410,4 +455,55 @@ it.layer(NodeServices.layer)("resolveAvailableEditors", (it) => {
     });
     assert.deepEqual(editors, []);
   });
+
+  it("omits macOS terminal editors on non-darwin platforms", () => {
+    const linuxEditors = resolveAvailableEditors("linux", { PATH: "" });
+    assert.notInclude(linuxEditors, "ghostty");
+    assert.notInclude(linuxEditors, "iterm2");
+    assert.notInclude(linuxEditors, "terminal");
+    assert.notInclude(linuxEditors, "warp");
+
+    const win32Editors = resolveAvailableEditors("win32", {
+      PATH: "",
+      PATHEXT: ".COM;.EXE;.BAT;.CMD",
+    });
+    assert.notInclude(win32Editors, "ghostty");
+    assert.notInclude(win32Editors, "iterm2");
+    assert.notInclude(win32Editors, "terminal");
+    assert.notInclude(win32Editors, "warp");
+  });
+
+  it.effect("includes macOS terminal editors when their .app bundle is found under HOME", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-home-" });
+      yield* fs.makeDirectory(path.join(home, "Applications", "Ghostty.app"), { recursive: true });
+
+      const editors = resolveAvailableEditors("darwin", {
+        PATH: "",
+        HOME: home,
+      });
+      assert.include(editors, "ghostty");
+    }),
+  );
+});
+
+it.layer(NodeServices.layer)("isMacosAppInstalled", (it) => {
+  it("returns false on non-darwin platforms", () => {
+    assert.equal(isMacosAppInstalled("Ghostty", "linux", { HOME: "/home/user" }), false);
+    assert.equal(isMacosAppInstalled("Ghostty", "win32", { HOME: "C:\\Users\\user" }), false);
+  });
+
+  it.effect("detects an app bundle inside the user's Applications directory", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "t3-home-" });
+      yield* fs.makeDirectory(path.join(home, "Applications", "Warp.app"), { recursive: true });
+
+      assert.equal(isMacosAppInstalled("Warp", "darwin", { HOME: home }), true);
+      assert.equal(isMacosAppInstalled("DefinitelyNotInstalled", "darwin", { HOME: home }), false);
+    }),
+  );
 });
