@@ -296,3 +296,140 @@ describe("retainThreadDetailSubscription", () => {
     stop();
   });
 });
+
+describe("resyncThreadDetailSubscription", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mockThreadUnsubscribe.mockImplementation(() => undefined);
+    mockSubscribeThread.mockImplementation(() => mockThreadUnsubscribe);
+    mockCreateWsRpcClient.mockReturnValue({
+      orchestration: {
+        subscribeThread: mockSubscribeThread,
+      },
+    });
+    mockCreateEnvironmentConnection.mockImplementation((input) => ({
+      kind: input.kind,
+      environmentId: input.knownEnvironment.environmentId,
+      knownEnvironment: input.knownEnvironment,
+      client: input.client,
+      ensureBootstrapped: vi.fn(async () => undefined),
+      reconnect: vi.fn(async () => undefined),
+      dispose: vi.fn(async () => undefined),
+    }));
+    mockSavedEnvironmentRegistrySubscribe.mockReturnValue(() => undefined);
+    mockWaitForSavedEnvironmentRegistryHydration.mockResolvedValue(undefined);
+    mockListSavedEnvironmentRecords.mockReturnValue([]);
+  });
+
+  afterEach(async () => {
+    const { resetEnvironmentServiceForTests } = await import("./service");
+    await resetEnvironmentServiceForTests();
+    vi.useRealTimers();
+  });
+
+  it("tears down the old stream and re-subscribes when the thread is tracked", async () => {
+    const {
+      retainThreadDetailSubscription,
+      resyncThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-resync");
+
+    const release = retainThreadDetailSubscription(environmentId, threadId);
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+    expect(mockThreadUnsubscribe).not.toHaveBeenCalled();
+
+    const issued = resyncThreadDetailSubscription(environmentId, threadId);
+    expect(issued).toBe(true);
+    expect(mockThreadUnsubscribe).toHaveBeenCalledTimes(1);
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(2);
+
+    release();
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("returns false and does nothing when the thread is not tracked", async () => {
+    const {
+      resyncThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-untracked");
+
+    const issued = resyncThreadDetailSubscription(environmentId, threadId);
+    expect(issued).toBe(false);
+    expect(mockSubscribeThread).not.toHaveBeenCalled();
+    expect(mockThreadUnsubscribe).not.toHaveBeenCalled();
+
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("does not change refCount: existing retainers still hold the subscription after resync", async () => {
+    const {
+      retainThreadDetailSubscription,
+      resyncThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-refcount");
+
+    const release = retainThreadDetailSubscription(environmentId, threadId);
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+
+    resyncThreadDetailSubscription(environmentId, threadId);
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(2);
+    // Re-attach unsubscribe count is 1 (the prior stream was torn down).
+    expect(mockThreadUnsubscribe).toHaveBeenCalledTimes(1);
+
+    // Retainer is still active — releasing it now triggers the standard idle
+    // eviction flow (unsubscribe fires after the idle TTL elapses).
+    release();
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    expect(mockThreadUnsubscribe).toHaveBeenCalledTimes(2);
+
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+
+  it("supports back-to-back resyncs", async () => {
+    const {
+      retainThreadDetailSubscription,
+      resyncThreadDetailSubscription,
+      startEnvironmentConnectionService,
+      resetEnvironmentServiceForTests,
+    } = await import("./service");
+
+    const stop = startEnvironmentConnectionService(new QueryClient());
+    const environmentId = EnvironmentId.make("env-1");
+    const threadId = ThreadId.make("thread-spam-resync");
+
+    const release = retainThreadDetailSubscription(environmentId, threadId);
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(1);
+
+    expect(resyncThreadDetailSubscription(environmentId, threadId)).toBe(true);
+    expect(resyncThreadDetailSubscription(environmentId, threadId)).toBe(true);
+    expect(resyncThreadDetailSubscription(environmentId, threadId)).toBe(true);
+
+    expect(mockSubscribeThread).toHaveBeenCalledTimes(4);
+    expect(mockThreadUnsubscribe).toHaveBeenCalledTimes(3);
+
+    release();
+    stop();
+    await resetEnvironmentServiceForTests();
+  });
+});

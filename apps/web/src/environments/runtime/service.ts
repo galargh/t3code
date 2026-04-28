@@ -416,6 +416,41 @@ function reconcileThreadDetailSubscriptionEvictionForEnvironment(
   evictIdleThreadDetailSubscriptionsToCapacity();
 }
 
+/**
+ * Force-refresh the per-thread subscription for `(environmentId, threadId)`.
+ *
+ * Tears down the current live `subscribeThread` stream and re-attaches it. The
+ * server always emits a snapshot first on subscribe, which is applied via
+ * `syncServerThreadDetail` in `attachThreadDetailSubscription` — overwriting any
+ * stale local thread/activities/turn state with server truth.
+ *
+ * Returns `true` if a resync was issued, `false` if the thread is not currently
+ * tracked (no live subscription) — in which case the next `retainThreadDetailSubscription`
+ * call will fetch fresh state on its own.
+ *
+ * Existing retainers stay attached; `refCount` is unchanged.
+ */
+export function resyncThreadDetailSubscription(
+  environmentId: EnvironmentId,
+  threadId: ThreadId,
+): boolean {
+  const key = getThreadDetailSubscriptionKey(environmentId, threadId);
+  const entry = threadDetailSubscriptions.get(key);
+  if (!entry) {
+    return false;
+  }
+  entry.unsubscribe();
+  entry.unsubscribe = NOOP;
+  entry.lastAccessedAt = Date.now();
+  if (attachThreadDetailSubscription(entry)) {
+    return true;
+  }
+  // Connection is currently down. Keep the entry primed so the next
+  // reconnect re-attaches and pulls a fresh snapshot.
+  watchThreadDetailSubscriptionConnection(entry);
+  return false;
+}
+
 export function retainThreadDetailSubscription(
   environmentId: EnvironmentId,
   threadId: ThreadId,
