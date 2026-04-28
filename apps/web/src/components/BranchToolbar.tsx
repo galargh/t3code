@@ -13,6 +13,7 @@ import {
 import { BranchToolbarBranchSelector } from "./BranchToolbarBranchSelector";
 import { BranchToolbarEnvironmentSelector } from "./BranchToolbarEnvironmentSelector";
 import { BranchToolbarEnvModeSelector } from "./BranchToolbarEnvModeSelector";
+import { BranchToolbarWorktreeName } from "./BranchToolbarWorktreeName";
 import { Separator } from "./ui/separator";
 
 interface BranchToolbarProps {
@@ -99,6 +100,9 @@ export const BranchToolbar = memo(function BranchToolbar({
           activeWorktreePath={activeWorktreePath}
           onEnvModeChange={onEnvModeChange}
         />
+        {activeWorktreePath !== null && (
+          <BranchToolbarWorktreeName worktreePath={activeWorktreePath} />
+        )}
       </div>
 
       <BranchToolbarBranchSelector
