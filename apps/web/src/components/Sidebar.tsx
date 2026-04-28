@@ -1933,13 +1933,29 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           outcome.cleanup.deletedActivities +
           outcome.cleanup.deletedMessages +
           outcome.cleanup.deletedProposedPlans;
+        const totalRepaired =
+          totalDeleted + outcome.cleanup.resetSessions + outcome.cleanup.resetTurns;
+        const orphanFragment =
+          `${outcome.cleanup.deletedActivities} activit${outcome.cleanup.deletedActivities === 1 ? "y" : "ies"}, ` +
+          `${outcome.cleanup.deletedMessages} message${outcome.cleanup.deletedMessages === 1 ? "" : "s"}, ` +
+          `${outcome.cleanup.deletedProposedPlans} proposed plan${outcome.cleanup.deletedProposedPlans === 1 ? "" : "s"}`;
+        const lifecycleFragments: string[] = [];
+        if (outcome.cleanup.resetSessions > 0) {
+          lifecycleFragments.push(
+            `${outcome.cleanup.resetSessions} reset session${outcome.cleanup.resetSessions === 1 ? "" : "s"}`,
+          );
+        }
+        if (outcome.cleanup.resetTurns > 0) {
+          lifecycleFragments.push(
+            `${outcome.cleanup.resetTurns} interrupted turn${outcome.cleanup.resetTurns === 1 ? "" : "s"}`,
+          );
+        }
         const cleanupSummary =
-          totalDeleted === 0
-            ? "No orphaned rows found on the server."
-            : `Removed ${totalDeleted} orphan row${totalDeleted === 1 ? "" : "s"} on the server (` +
-              `${outcome.cleanup.deletedActivities} activit${outcome.cleanup.deletedActivities === 1 ? "y" : "ies"}, ` +
-              `${outcome.cleanup.deletedMessages} message${outcome.cleanup.deletedMessages === 1 ? "" : "s"}, ` +
-              `${outcome.cleanup.deletedProposedPlans} proposed plan${outcome.cleanup.deletedProposedPlans === 1 ? "" : "s"}).`;
+          totalRepaired === 0
+            ? "No stale projection state found on the server."
+            : `Repaired ${totalRepaired} row${totalRepaired === 1 ? "" : "s"} on the server (` +
+              [orphanFragment, ...lifecycleFragments].join(", ") +
+              ").";
         toastManager.add(
           stackedThreadToast(
             outcome.resyncIssued
