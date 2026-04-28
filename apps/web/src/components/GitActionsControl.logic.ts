@@ -7,10 +7,10 @@ import { isTemporaryWorktreeBranch } from "@t3tools/shared/git";
 
 export type GitActionIconName = "commit" | "push" | "pr";
 
-export type GitDialogAction = "commit" | "push" | "create_pr";
+export type GitDialogAction = "commit" | "push" | "create_pr" | "create_draft_pr";
 
 export interface GitActionMenuItem {
-  id: "commit" | "push" | "pr";
+  id: "commit" | "push" | "pr" | "draft_pr";
   label: string;
   disabled: boolean;
   icon: GitActionIconName;
@@ -35,8 +35,10 @@ export interface DefaultBranchActionDialogCopy {
 export type DefaultBranchConfirmableAction =
   | "push"
   | "create_pr"
+  | "create_draft_pr"
   | "commit_push"
-  | "commit_push_pr";
+  | "commit_push_pr"
+  | "commit_push_draft_pr";
 
 export function buildGitActionProgressStages(input: {
   action: GitStackedAction;
@@ -57,7 +59,7 @@ export function buildGitActionProgressStages(input: {
   if (input.action === "push") {
     return [pushStage];
   }
-  if (input.action === "create_pr") {
+  if (input.action === "create_pr" || input.action === "create_draft_pr") {
     return input.shouldPushBeforePr ? [pushStage, ...prStages] : prStages;
   }
 
@@ -139,6 +141,18 @@ export function buildMenuItems(
           kind: "open_dialog",
           dialogAction: "create_pr",
         },
+    ...(hasOpenPr
+      ? []
+      : [
+          {
+            id: "draft_pr" as const,
+            label: "Create draft PR",
+            disabled: !canCreatePr,
+            icon: "pr" as const,
+            kind: "open_dialog" as const,
+            dialogAction: "create_draft_pr" as const,
+          },
+        ]),
   ];
 }
 
@@ -285,8 +299,10 @@ export function requiresDefaultBranchConfirmation(
   return (
     action === "push" ||
     action === "create_pr" ||
+    action === "create_draft_pr" ||
     action === "commit_push" ||
-    action === "commit_push_pr"
+    action === "commit_push_pr" ||
+    action === "commit_push_draft_pr"
   );
 }
 
@@ -313,17 +329,22 @@ export function resolveDefaultBranchActionDialogCopy(input: {
     };
   }
 
+  const isDraft =
+    input.action === "create_draft_pr" || input.action === "commit_push_draft_pr";
+  const prLabel = isDraft ? "draft PR" : "PR";
+  const prContinueLabel = isDraft ? "create draft PR" : "create PR";
+
   if (input.includesCommit) {
     return {
-      title: "Commit, push & create PR from default branch?",
-      description: `This action will commit, push, and create a PR${suffix}`,
-      continueLabel: `Commit, push & create PR`,
+      title: `Commit, push & create ${prLabel} from default branch?`,
+      description: `This action will commit, push, and create a ${prLabel}${suffix}`,
+      continueLabel: `Commit, push & ${prContinueLabel}`,
     };
   }
   return {
-    title: "Push & create PR from default branch?",
-    description: `This action will push local commits and create a PR${suffix}`,
-    continueLabel: "Push & create PR",
+    title: `Push & create ${prLabel} from default branch?`,
+    description: `This action will push local commits and create a ${prLabel}${suffix}`,
+    continueLabel: `Push & ${prContinueLabel}`,
   };
 }
 

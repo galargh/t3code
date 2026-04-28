@@ -10,8 +10,10 @@ export const GitStackedAction = Schema.Literals([
   "commit",
   "push",
   "create_pr",
+  "create_draft_pr",
   "commit_push",
   "commit_push_pr",
+  "commit_push_draft_pr",
 ]);
 export type GitStackedAction = typeof GitStackedAction.Type;
 export const GitActionProgressPhase = Schema.Literals(["branch", "commit", "push", "pr"]);

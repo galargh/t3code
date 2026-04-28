@@ -215,6 +215,7 @@ const makeGitHubCli = Effect.sync(() => {
           input.title,
           "--body-file",
           input.bodyFile,
+          ...(input.draft ? ["--draft"] : []),
         ],
       }).pipe(Effect.asVoid),
     getDefaultBranch: (input) =>

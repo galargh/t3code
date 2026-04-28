@@ -556,6 +556,7 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
             input.title,
             "--body-file",
             input.bodyFile,
+            ...(input.draft ? ["--draft"] : []),
           ],
         }).pipe(Effect.asVoid),
       getDefaultBranch: (input) =>
@@ -598,7 +599,14 @@ function runStackedAction(
   manager: GitManagerShape,
   input: {
     cwd: string;
-    action: "commit" | "push" | "create_pr" | "commit_push" | "commit_push_pr";
+    action:
+      | "commit"
+      | "push"
+      | "create_pr"
+      | "create_draft_pr"
+      | "commit_push"
+      | "commit_push_pr"
+      | "commit_push_draft_pr";
     actionId?: string;
     commitMessage?: string;
     featureBranch?: boolean;
@@ -1675,7 +1683,110 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
           call.includes("pr create --base main --head feature/create-pr-only"),
         ),
       ).toBe(true);
+      expect(ghCalls.some((call) => call.startsWith("pr create ") && call.includes("--draft"))).toBe(
+        false,
+      );
     }),
+  );
+
+  it.effect(
+    "create_draft_pr pushes a clean branch and creates a draft PR with --draft",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/create-draft-pr-only"]);
+        const remoteDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+        fs.writeFileSync(path.join(repoDir, "create-draft-pr-only.txt"), "draft\n");
+        yield* runGit(repoDir, ["add", "create-draft-pr-only.txt"]);
+        yield* runGit(repoDir, ["commit", "-m", "Create draft PR only branch"]);
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            prListSequence: [
+              "[]",
+              JSON.stringify([
+                {
+                  number: 304,
+                  title: "Create draft PR only branch",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/304",
+                  baseRefName: "main",
+                  headRefName: "feature/create-draft-pr-only",
+                },
+              ]),
+            ],
+          },
+        });
+
+        const result = yield* runStackedAction(manager, {
+          cwd: repoDir,
+          action: "create_draft_pr",
+        });
+
+        expect(result.commit.status).toBe("skipped_not_requested");
+        expect(result.push.status).toBe("pushed");
+        expect(result.push.setUpstream).toBe(true);
+        expect(result.pr.status).toBe("created");
+        expect(result.pr.number).toBe(304);
+        expect(
+          ghCalls.some(
+            (call) =>
+              call.startsWith("pr create ") &&
+              call.includes("--head feature/create-draft-pr-only") &&
+              call.includes("--draft"),
+          ),
+        ).toBe(true);
+      }),
+  );
+
+  it.effect(
+    "commit_push_draft_pr commits, pushes and creates a draft PR with --draft",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/commit-push-draft-pr"]);
+        const remoteDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+        fs.writeFileSync(path.join(repoDir, "draft-flow.txt"), "draft\n");
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            prListSequence: [
+              "[]",
+              JSON.stringify([
+                {
+                  number: 305,
+                  title: "Commit push draft PR",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/305",
+                  baseRefName: "main",
+                  headRefName: "feature/commit-push-draft-pr",
+                },
+              ]),
+            ],
+          },
+        });
+
+        const result = yield* runStackedAction(manager, {
+          cwd: repoDir,
+          action: "commit_push_draft_pr",
+        });
+
+        expect(result.branch.status).toBe("skipped_not_requested");
+        expect(result.commit.status).toBe("created");
+        expect(result.push.status).toBe("pushed");
+        expect(result.push.setUpstream).toBe(true);
+        expect(result.pr.status).toBe("created");
+        expect(
+          ghCalls.some(
+            (call) =>
+              call.startsWith("pr create ") &&
+              call.includes("--head feature/commit-push-draft-pr") &&
+              call.includes("--draft"),
+          ),
+        ).toBe(true);
+      }),
   );
 
   it.effect("returns existing PR metadata for commit/push/pr action", () =>

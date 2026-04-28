@@ -129,6 +129,14 @@ describe("when: actions are busy", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 });
@@ -249,6 +257,14 @@ describe("when: branch is clean, ahead, and has no open PR", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: false,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 });
@@ -289,6 +305,14 @@ describe("when: branch is clean, up to date, and has no open PR", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 });
@@ -325,6 +349,14 @@ describe("when: branch is behind upstream", () => {
         icon: "pr",
         kind: "open_dialog",
         dialogAction: "create_pr",
+      },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
       },
     ]);
   });
@@ -416,6 +448,14 @@ describe("when: working tree has local changes", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 });
@@ -490,6 +530,14 @@ describe("when: working tree has local changes and branch is behind upstream", (
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 });
@@ -529,6 +577,14 @@ describe("when: HEAD is detached and there are no local changes", () => {
         icon: "pr",
         kind: "open_dialog",
         dialogAction: "create_pr",
+      },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
       },
     ]);
   });
@@ -622,6 +678,14 @@ describe("when: branch has no upstream configured", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 
@@ -688,6 +752,14 @@ describe("when: branch has no upstream configured", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: false,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 
@@ -721,6 +793,14 @@ describe("when: branch has no upstream configured", () => {
         icon: "pr",
         kind: "open_dialog",
         dialogAction: "create_pr",
+      },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
       },
     ]);
   });
@@ -798,6 +878,14 @@ describe("when: branch has no upstream configured", () => {
         kind: "open_dialog",
         dialogAction: "create_pr",
       },
+      {
+        id: "draft_pr",
+        label: "Create draft PR",
+        disabled: true,
+        icon: "pr",
+        kind: "open_dialog",
+        dialogAction: "create_draft_pr",
+      },
     ]);
   });
 });
@@ -807,10 +895,14 @@ describe("requiresDefaultBranchConfirmation", () => {
     assert.isFalse(requiresDefaultBranchConfirmation("commit", true));
     assert.isTrue(requiresDefaultBranchConfirmation("push", true));
     assert.isTrue(requiresDefaultBranchConfirmation("create_pr", true));
+    assert.isTrue(requiresDefaultBranchConfirmation("create_draft_pr", true));
     assert.isTrue(requiresDefaultBranchConfirmation("commit_push", true));
     assert.isTrue(requiresDefaultBranchConfirmation("commit_push_pr", true));
+    assert.isTrue(requiresDefaultBranchConfirmation("commit_push_draft_pr", true));
     assert.isFalse(requiresDefaultBranchConfirmation("commit_push", false));
     assert.isFalse(requiresDefaultBranchConfirmation("push", false));
+    assert.isFalse(requiresDefaultBranchConfirmation("create_draft_pr", false));
+    assert.isFalse(requiresDefaultBranchConfirmation("commit_push_draft_pr", false));
   });
 });
 
@@ -857,6 +949,36 @@ describe("resolveDefaultBranchActionDialogCopy", () => {
       description:
         'This action will commit, push, and create a PR on "main". You can continue on this branch or create a feature branch and run the same action there.',
       continueLabel: "Commit, push & create PR",
+    });
+  });
+
+  it("uses draft-PR copy for create_draft_pr without a commit", () => {
+    const copy = resolveDefaultBranchActionDialogCopy({
+      action: "create_draft_pr",
+      branchName: "main",
+      includesCommit: false,
+    });
+
+    assert.deepEqual(copy, {
+      title: "Push & create draft PR from default branch?",
+      description:
+        'This action will push local commits and create a draft PR on "main". You can continue on this branch or create a feature branch and run the same action there.',
+      continueLabel: "Push & create draft PR",
+    });
+  });
+
+  it("uses draft-PR copy for commit_push_draft_pr that includes a commit", () => {
+    const copy = resolveDefaultBranchActionDialogCopy({
+      action: "commit_push_draft_pr",
+      branchName: "main",
+      includesCommit: true,
+    });
+
+    assert.deepEqual(copy, {
+      title: "Commit, push & create draft PR from default branch?",
+      description:
+        'This action will commit, push, and create a draft PR on "main". You can continue on this branch or create a feature branch and run the same action there.',
+      continueLabel: "Commit, push & create draft PR",
     });
   });
 });
@@ -919,6 +1041,38 @@ describe("buildGitActionProgressStages", () => {
   it("includes granular PR stages for commit+push+PR actions", () => {
     const stages = buildGitActionProgressStages({
       action: "commit_push_pr",
+      hasCustomCommitMessage: true,
+      hasWorkingTreeChanges: true,
+      pushTarget: "origin/feature/test",
+    });
+    assert.deepEqual(stages, [
+      "Committing...",
+      "Pushing to origin/feature/test...",
+      "Preparing PR...",
+      "Generating PR content...",
+      "Creating GitHub pull request...",
+    ]);
+  });
+
+  it("matches create_pr stages for create_draft_pr", () => {
+    const stages = buildGitActionProgressStages({
+      action: "create_draft_pr",
+      hasCustomCommitMessage: false,
+      hasWorkingTreeChanges: false,
+      pushTarget: "origin/feature/test",
+      shouldPushBeforePr: true,
+    });
+    assert.deepEqual(stages, [
+      "Pushing to origin/feature/test...",
+      "Preparing PR...",
+      "Generating PR content...",
+      "Creating GitHub pull request...",
+    ]);
+  });
+
+  it("matches commit_push_pr stages for commit_push_draft_pr", () => {
+    const stages = buildGitActionProgressStages({
+      action: "commit_push_draft_pr",
       hasCustomCommitMessage: true,
       hasWorkingTreeChanges: true,
       pushTarget: "origin/feature/test",
