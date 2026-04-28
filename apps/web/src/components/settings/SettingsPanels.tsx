@@ -9,7 +9,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type DesktopUpdateChannel,
   type ScopedThreadRef,
@@ -18,9 +18,13 @@ import {
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import { scopeThreadRef } from "@t3tools/client-runtime";
-import { DEFAULT_UNIFIED_SETTINGS } from "@t3tools/contracts/settings";
+import {
+  DEFAULT_FEATURE_BRANCH_PREFIX,
+  DEFAULT_UNIFIED_SETTINGS,
+  FeatureBranchPrefix,
+} from "@t3tools/contracts/settings";
 import { createModelSelection, normalizeModelSlug } from "@t3tools/shared/model";
-import { Equal } from "effect";
+import { Equal, Result, Schema } from "effect";
 import { APP_VERSION } from "../../branding";
 import {
   canCheckForUpdate,
@@ -578,6 +582,10 @@ export function GeneralSettingsPanel() {
   const [customModelErrorByProvider, setCustomModelErrorByProvider] = useState<
     Partial<Record<ProviderKind, string | null>>
   >({});
+  const [featureBranchPrefixDraft, setFeatureBranchPrefixDraft] = useState(
+    settings.featureBranchPrefix,
+  );
+  const [featureBranchPrefixError, setFeatureBranchPrefixError] = useState<string | null>(null);
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
   const refreshingRef = useRef(false);
   const modelListRefs = useRef<Partial<Record<ProviderKind, HTMLDivElement | null>>>({});
@@ -595,6 +603,31 @@ export function GeneralSettingsPanel() {
         setIsRefreshingProviders(false);
       });
   }, []);
+
+  // Re-sync the feature branch prefix draft when the underlying setting
+  // changes (e.g. reset, server push from another window, manual file edit).
+  useEffect(() => {
+    setFeatureBranchPrefixDraft(settings.featureBranchPrefix);
+    setFeatureBranchPrefixError(null);
+  }, [settings.featureBranchPrefix]);
+
+  const handleFeatureBranchPrefixChange = useCallback(
+    (next: string) => {
+      setFeatureBranchPrefixDraft(next);
+      const result = Schema.decodeUnknownResult(FeatureBranchPrefix)(next);
+      if (Result.isFailure(result)) {
+        setFeatureBranchPrefixError(
+          "Use letters, digits, dots, dashes, or underscores only (no slashes or spaces). Max 64 characters.",
+        );
+        return;
+      }
+      setFeatureBranchPrefixError(null);
+      if (result.success !== settings.featureBranchPrefix) {
+        updateSettings({ featureBranchPrefix: result.success });
+      }
+    },
+    [settings.featureBranchPrefix, updateSettings],
+  );
 
   const keybindingsConfigPath = useServerKeybindingsConfigPath();
   const availableEditors = useServerAvailableEditors();
@@ -1166,6 +1199,43 @@ export function GeneralSettingsPanel() {
             </div>
           }
         />
+      </SettingsSection>
+
+      <SettingsSection title="Worktrees">
+        <SettingsRow
+          title="Feature branch prefix"
+          description="Prefix prepended to AI-generated feature branch names (e.g. `t3code/add-dark-mode`)."
+          resetAction={
+            settings.featureBranchPrefix !== DEFAULT_FEATURE_BRANCH_PREFIX ? (
+              <SettingResetButton
+                label="feature branch prefix"
+                onClick={() => {
+                  setFeatureBranchPrefixError(null);
+                  setFeatureBranchPrefixDraft(DEFAULT_FEATURE_BRANCH_PREFIX);
+                  updateSettings({ featureBranchPrefix: DEFAULT_FEATURE_BRANCH_PREFIX });
+                }}
+              />
+            ) : null
+          }
+          control={
+            <Input
+              className="w-full sm:w-72"
+              value={featureBranchPrefixDraft}
+              onChange={(event) => handleFeatureBranchPrefixChange(event.target.value)}
+              placeholder={DEFAULT_FEATURE_BRANCH_PREFIX}
+              spellCheck={false}
+              maxLength={64}
+              aria-invalid={featureBranchPrefixError ? true : undefined}
+              aria-label="Feature branch prefix"
+            />
+          }
+        >
+          {featureBranchPrefixError ? (
+            <p className="mt-2 px-1 pb-3 text-xs text-destructive">
+              {featureBranchPrefixError}
+            </p>
+          ) : null}
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection
