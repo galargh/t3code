@@ -93,6 +93,7 @@ import {
   type Thread,
   type TurnDiffSummary,
 } from "../types";
+import { usePrTitleSync } from "../hooks/usePrTitleSync";
 import { useTheme } from "../hooks/useTheme";
 import { useTurnDiffSummaries } from "../hooks/useTurnDiffSummaries";
 import { useCommandPaletteStore } from "../commandPaletteStore";
@@ -1431,6 +1432,14 @@ export default function ChatView(props: ChatViewProps) {
       })
     : null;
   const gitStatusQuery = useGitStatus({ environmentId, cwd: gitCwd });
+  // Keep the active server thread's title in sync with its associated PR title (if any).
+  // No-op for drafts and for threads whose branch has no resolved PR.
+  usePrTitleSync({
+    threadId: isServerThread && serverThread ? serverThread.id : null,
+    currentTitle: isServerThread && serverThread ? serverThread.title : null,
+    environmentId,
+    cwd: gitCwd,
+  });
   const keybindings = useServerKeybindings();
   const availableEditors = useServerAvailableEditors();
   const activeProviderStatus = useMemo(
