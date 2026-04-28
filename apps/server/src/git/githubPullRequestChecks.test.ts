@@ -30,33 +30,37 @@ describe("extractWorkflowRunId", () => {
 });
 
 describe("decodeGitHubPullRequestChecksJson", () => {
-  it("decodes a mixed list and derives bucket / runId", () => {
+  it("decodes a mixed list and derives status/conclusion + bucket/runId from gh's `state` field", () => {
     const raw = JSON.stringify([
       {
         name: "test",
-        status: "COMPLETED",
-        conclusion: "SUCCESS",
+        state: "SUCCESS",
         workflow: "CI",
-        detailsUrl: "https://github.com/o/r/actions/runs/100/job/200",
+        link: "https://github.com/o/r/actions/runs/100/job/200",
         bucket: "pass",
       },
       {
         name: "lint",
-        status: "completed",
-        conclusion: "failure",
+        state: "failure",
         workflow: "CI",
-        detailsUrl: "https://github.com/o/r/actions/runs/100/job/201",
+        link: "https://github.com/o/r/actions/runs/100/job/201",
         // bucket missing — should be derived
       },
       {
         name: "matrix-build",
-        status: "in_progress",
-        conclusion: null,
+        state: "in_progress",
         workflow: "CI",
-        detailsUrl: "https://github.com/o/r/actions/runs/100",
+        link: "https://github.com/o/r/actions/runs/100",
+      },
+      {
+        name: "queued-job",
+        state: "QUEUED",
+        workflow: "CI",
+        link: "https://github.com/o/r/actions/runs/100",
+        bucket: "pending",
       },
       // Empty-name entry should be dropped.
-      { name: "  ", status: "QUEUED" },
+      { name: "  ", state: "QUEUED" },
     ]);
 
     const result = decodeGitHubPullRequestChecksJson(raw);
@@ -86,6 +90,16 @@ describe("decodeGitHubPullRequestChecksJson", () => {
       {
         name: "matrix-build",
         status: "IN_PROGRESS",
+        conclusion: null,
+        workflow: "CI",
+        detailsUrl: "https://github.com/o/r/actions/runs/100",
+        workflowRunId: "100",
+        jobId: null,
+        bucket: "pending",
+      },
+      {
+        name: "queued-job",
+        status: "QUEUED",
         conclusion: null,
         workflow: "CI",
         detailsUrl: "https://github.com/o/r/actions/runs/100",

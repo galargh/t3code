@@ -155,6 +155,16 @@ export interface GitHubCliShape {
     readonly cwd: string;
     readonly prNumber: number;
   }) => Effect.Effect<void, GitHubCliError>;
+
+  /**
+   * Disable auto-merge on a PR (effectively "remove from queue"). Wraps
+   * `gh pr merge <n> --disable-auto`. Caller is responsible for refreshing
+   * status / detail caches.
+   */
+  readonly disablePullRequestAutoMerge: (input: {
+    readonly cwd: string;
+    readonly prNumber: number;
+  }) => Effect.Effect<void, GitHubCliError>;
 }
 
 /**

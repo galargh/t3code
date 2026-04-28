@@ -13,6 +13,8 @@ import {
   GitPullRequestChecksResult,
   GitPullRequestCommentsResult,
   GitPullRequestDetailResult,
+  GitPullRequestDisableAutoMergeInput,
+  GitPullRequestDisableAutoMergeResult,
   GitPullRequestForCwdInput,
   GitPullRequestMergeInput,
   GitPullRequestMergeResult,
@@ -148,6 +150,14 @@ export interface GitManagerShape {
   readonly updatePullRequestBranch: (
     input: GitPullRequestUpdateBranchInput,
   ) => Effect.Effect<GitPullRequestUpdateBranchResult, GitManagerServiceError>;
+
+  /**
+   * Disable auto-merge on a PR (effectively "remove from queue") and
+   * invalidate status / detail caches so subsequent reads observe the change.
+   */
+  readonly disablePullRequestAutoMerge: (
+    input: GitPullRequestDisableAutoMergeInput,
+  ) => Effect.Effect<GitPullRequestDisableAutoMergeResult, GitManagerServiceError>;
 }
 
 /**

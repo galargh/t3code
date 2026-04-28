@@ -225,7 +225,7 @@ layer("GitHubCliLive", (it) => {
     }),
   );
 
-  it.effect("getPullRequestDetail decodes detail JSON", () =>
+  it.effect("getPullRequestDetail decodes detail JSON (including autoMergeRequest)", () =>
     Effect.gen(function* () {
       mockedRunProcess.mockResolvedValueOnce({
         stdout: JSON.stringify({
@@ -241,6 +241,11 @@ layer("GitHubCliLive", (it) => {
           headRefName: "feature/x",
           author: { login: "alice", name: "Alice" },
           reviewDecision: "APPROVED",
+          autoMergeRequest: {
+            mergeMethod: "SQUASH",
+            enabledAt: "2026-04-28T12:00:00Z",
+            enabledBy: { login: "alice" },
+          },
         }),
         stderr: "",
         code: 0,
@@ -255,6 +260,11 @@ layer("GitHubCliLive", (it) => {
 
       expect(result.number).toBe(7);
       expect(result.mergeStateStatus).toBe("CLEAN");
+      expect(result.autoMergeRequest).toEqual({
+        mergeMethod: "squash",
+        enabledAt: "2026-04-28T12:00:00Z",
+        enabledBy: { login: "alice" },
+      });
       expect(mockedRunProcess).toHaveBeenCalledWith(
         "gh",
         [
@@ -262,23 +272,22 @@ layer("GitHubCliLive", (it) => {
           "view",
           "7",
           "--json",
-          "number,url,title,body,state,isDraft,mergeable,mergeStateStatus,baseRefName,headRefName,author,reviewDecision",
+          "number,url,title,body,state,isDraft,mergeable,mergeStateStatus,baseRefName,headRefName,author,reviewDecision,autoMergeRequest",
         ],
         expect.objectContaining({ cwd: "/repo" }),
       );
     }),
   );
 
-  it.effect("getPullRequestChecks decodes checks JSON and derives runId", () =>
+  it.effect("getPullRequestChecks decodes checks JSON (state field) and derives runId", () =>
     Effect.gen(function* () {
       mockedRunProcess.mockResolvedValueOnce({
         stdout: JSON.stringify([
           {
             name: "test",
-            status: "COMPLETED",
-            conclusion: "SUCCESS",
+            state: "SUCCESS",
             workflow: "CI",
-            detailsUrl: "https://github.com/o/r/actions/runs/100/job/200",
+            link: "https://github.com/o/r/actions/runs/100/job/200",
             bucket: "pass",
           },
         ]),
@@ -294,20 +303,24 @@ layer("GitHubCliLive", (it) => {
       });
 
       expect(result).toHaveLength(1);
+      expect(result[0]?.status).toBe("COMPLETED");
+      expect(result[0]?.conclusion).toBe("SUCCESS");
       expect(result[0]?.workflowRunId).toBe("100");
       expect(result[0]?.jobId).toBe("200");
       expect(mockedRunProcess).toHaveBeenCalledWith(
         "gh",
-        ["pr", "checks", "7", "--json", "name,status,conclusion,workflow,detailsUrl,bucket"],
+        ["pr", "checks", "7", "--json", "name,state,bucket,workflow,link"],
         expect.objectContaining({ cwd: "/repo" }),
       );
     }),
   );
 
-  it.effect("getPullRequestComments flattens reviews and threads", () =>
+  it.effect("getPullRequestComments combines gh pr view + graphql review threads", () =>
     Effect.gen(function* () {
+      // First call: gh pr view --json id,comments,reviews
       mockedRunProcess.mockResolvedValueOnce({
         stdout: JSON.stringify({
+          id: "PR_kwDO_test",
           comments: [
             {
               id: 1,
@@ -317,22 +330,40 @@ layer("GitHubCliLive", (it) => {
             },
           ],
           reviews: [],
-          reviewThreads: [
-            {
-              id: "T1",
-              isResolved: false,
-              comments: [
-                {
-                  id: 2,
-                  body: "review body",
-                  createdAt: "2025-01-01T00:00:00Z",
-                  path: "src/foo.ts",
-                  line: 10,
-                  author: { login: "bob" },
-                },
-              ],
+        }),
+        stderr: "",
+        code: 0,
+        signal: null,
+        timedOut: false,
+      });
+      // Second call: gh api graphql -F id=... -f query=...
+      mockedRunProcess.mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          data: {
+            node: {
+              reviewThreads: {
+                nodes: [
+                  {
+                    id: "T1",
+                    isResolved: false,
+                    comments: {
+                      nodes: [
+                        {
+                          id: 2,
+                          body: "review body",
+                          createdAt: "2025-01-01T00:00:00Z",
+                          path: "src/foo.ts",
+                          line: 10,
+                          replyTo: null,
+                          author: { login: "bob" },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
             },
-          ],
+          },
         }),
         stderr: "",
         code: 0,
@@ -346,9 +377,46 @@ layer("GitHubCliLive", (it) => {
       });
 
       expect(result.map((c) => c.id)).toEqual(["thread:T1:2", "issue:1"]);
+      expect(mockedRunProcess).toHaveBeenNthCalledWith(
+        1,
+        "gh",
+        ["pr", "view", "7", "--json", "id,comments,reviews"],
+        expect.objectContaining({ cwd: "/repo" }),
+      );
+      expect(mockedRunProcess).toHaveBeenNthCalledWith(
+        2,
+        "gh",
+        [
+          "api",
+          "graphql",
+          "-f",
+          "id=PR_kwDO_test",
+          "-f",
+          expect.stringMatching(/^query=.*reviewThreads/s),
+        ],
+        expect.objectContaining({ cwd: "/repo" }),
+      );
+    }),
+  );
+
+  it.effect("disablePullRequestAutoMerge invokes gh pr merge --disable-auto", () =>
+    Effect.gen(function* () {
+      mockedRunProcess.mockResolvedValueOnce({
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        timedOut: false,
+      });
+
+      yield* Effect.gen(function* () {
+        const gh = yield* GitHubCli;
+        yield* gh.disablePullRequestAutoMerge({ cwd: "/repo", prNumber: 7 });
+      });
+
       expect(mockedRunProcess).toHaveBeenCalledWith(
         "gh",
-        ["pr", "view", "7", "--comments", "--json", "comments,reviews,reviewThreads"],
+        ["pr", "merge", "7", "--disable-auto"],
         expect.objectContaining({ cwd: "/repo" }),
       );
     }),

@@ -28,6 +28,8 @@ import {
   GitPullRequestChecksResult,
   GitPullRequestCommentsResult,
   GitPullRequestDetailResult,
+  GitPullRequestDisableAutoMergeInput,
+  GitPullRequestDisableAutoMergeResult,
   GitPullRequestForCwdInput,
   GitPullRequestMergeInput,
   GitPullRequestMergeResult,
@@ -121,6 +123,7 @@ export const WS_METHODS = {
   gitPrMerge: "git.prMerge",
   gitPrRerunChecks: "git.prRerunChecks",
   gitPrUpdateBranch: "git.prUpdateBranch",
+  gitPrDisableAutoMerge: "git.prDisableAutoMerge",
 
   // Terminal methods
   terminalOpen: "terminal.open",
@@ -268,6 +271,12 @@ export const WsGitPrRerunChecksRpc = Rpc.make(WS_METHODS.gitPrRerunChecks, {
 export const WsGitPrUpdateBranchRpc = Rpc.make(WS_METHODS.gitPrUpdateBranch, {
   payload: GitPullRequestUpdateBranchInput,
   success: GitPullRequestUpdateBranchResult,
+  error: GitManagerServiceError,
+});
+
+export const WsGitPrDisableAutoMergeRpc = Rpc.make(WS_METHODS.gitPrDisableAutoMerge, {
+  payload: GitPullRequestDisableAutoMergeInput,
+  success: GitPullRequestDisableAutoMergeResult,
   error: GitManagerServiceError,
 });
 
@@ -440,6 +449,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsGitPrMergeRpc,
   WsGitPrRerunChecksRpc,
   WsGitPrUpdateBranchRpc,
+  WsGitPrDisableAutoMergeRpc,
   WsGitListBranchesRpc,
   WsGitCreateWorktreeRpc,
   WsGitRemoveWorktreeRpc,

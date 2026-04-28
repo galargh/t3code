@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { scopeThreadRef } from "@t3tools/client-runtime";
 import type {
+  GitPrAutoMergeRequest,
   GitPrCheckBucket,
   GitPrCheckConclusion,
   GitPrCheckStatus,
@@ -30,6 +31,7 @@ import {
   prChecksQueryOptions,
   prCommentsQueryOptions,
   prDetailQueryOptions,
+  prDisableAutoMergeMutationOptions,
   prMergeMutationOptions,
   prRerunChecksMutationOptions,
   prUpdateBranchMutationOptions,
@@ -105,6 +107,9 @@ export default function PrPanel({ mode = "inline" }: PrPanelProps) {
   );
   const updateBranchMutation = useMutation(
     prUpdateBranchMutationOptions({ environmentId, cwd: activeCwd, prNumber, queryClient }),
+  );
+  const disableAutoMergeMutation = useMutation(
+    prDisableAutoMergeMutationOptions({ environmentId, cwd: activeCwd, prNumber, queryClient }),
   );
 
   const refresh = useCallback(() => {
@@ -216,6 +221,26 @@ export default function PrPanel({ mode = "inline" }: PrPanelProps) {
     });
   }, [updateBranchMutation]);
 
+  const onDisableAutoMerge = useCallback(() => {
+    disableAutoMergeMutation.mutate(undefined, {
+      onSuccess: () =>
+        toastManager.add(
+          stackedThreadToast({
+            type: "success",
+            title: "Removed PR from auto-merge queue",
+          }),
+        ),
+      onError: (error) =>
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to remove PR from queue",
+            description: error instanceof Error ? error.message : undefined,
+          }),
+        ),
+    });
+  }, [disableAutoMergeMutation]);
+
   const onRerunFailed = useCallback(
     (workflowRunId: string) => {
       rerunMutation.mutate(
@@ -305,8 +330,10 @@ export default function PrPanel({ mode = "inline" }: PrPanelProps) {
             onMerge={onMerge}
             onUpdateBranch={onUpdateBranch}
             onResolveConflicts={onResolveConflicts}
+            onDisableAutoMerge={onDisableAutoMerge}
             isMergePending={mergeMutation.isPending}
             isUpdateBranchPending={updateBranchMutation.isPending}
+            isDisableAutoMergePending={disableAutoMergeMutation.isPending}
           />
         </div>
       )}
@@ -434,7 +461,16 @@ function MergeStateBadge(props: { mergeStateStatus: GitPrMergeStateStatus }) {
   })();
   return (
     <Badge variant="outline" size="sm" className={tone}>
-      {props.mergeStateStatus.toLowerCase()}
+      Merge state: {props.mergeStateStatus.toLowerCase()}
+    </Badge>
+  );
+}
+
+function AutoMergeBadge(props: { autoMergeRequest: GitPrAutoMergeRequest }) {
+  return (
+    <Badge variant="outline" size="sm" className="text-emerald-600 dark:text-emerald-300">
+      Auto-merge: {props.autoMergeRequest.mergeMethod} · @
+      {props.autoMergeRequest.enabledBy.login}
     </Badge>
   );
 }
@@ -459,7 +495,10 @@ function PrSummaryCard(props: { detail: GitPullRequestDetail | null; isLoading: 
         <span className="text-foreground">{detail.headRefName}</span>
         <span className="text-muted-foreground">·</span>
         <span className="text-foreground">@{detail.author.login}</span>
-        <div className="ml-auto flex items-center gap-1.5">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+          {detail.autoMergeRequest && (
+            <AutoMergeBadge autoMergeRequest={detail.autoMergeRequest} />
+          )}
           <MergeStateBadge mergeStateStatus={detail.mergeStateStatus} />
           {detail.reviewDecision && <ReviewDecisionBadge value={detail.reviewDecision} />}
         </div>
@@ -707,26 +746,27 @@ function PrActionBar(props: {
   onMerge: (method: GitPrMergeMethod, auto: boolean) => void;
   onUpdateBranch: () => void;
   onResolveConflicts: () => void;
+  onDisableAutoMerge: () => void;
   isMergePending: boolean;
   isUpdateBranchPending: boolean;
+  isDisableAutoMergePending: boolean;
 }) {
   const detail = props.detail;
+  if (detail === null) {
+    return null;
+  }
+
+  const isAutoMergeEnabled = detail.autoMergeRequest !== null;
   const mergeable =
-    detail !== null &&
     detail.state === "open" &&
     !detail.isDraft &&
     detail.mergeable !== "CONFLICTING" &&
     detail.mergeStateStatus !== "DIRTY";
   const isClean =
-    detail !== null &&
-    (detail.mergeStateStatus === "CLEAN" || detail.mergeStateStatus === "HAS_HOOKS");
-  const showUpdateBranch = detail !== null && detail.mergeStateStatus === "BEHIND";
+    detail.mergeStateStatus === "CLEAN" || detail.mergeStateStatus === "HAS_HOOKS";
+  const showUpdateBranch = detail.mergeStateStatus === "BEHIND";
   const showResolveConflicts =
-    detail !== null && (detail.mergeStateStatus === "DIRTY" || detail.mergeable === "CONFLICTING");
-
-  if (detail === null) {
-    return null;
-  }
+    detail.mergeStateStatus === "DIRTY" || detail.mergeable === "CONFLICTING";
 
   const mergeLabel = isClean ? "Merge" : "Enable auto-merge";
   const auto = !isClean;
@@ -734,31 +774,45 @@ function PrActionBar(props: {
   return (
     <section className="sticky bottom-0 -mx-4 mt-2 border-t border-border/60 bg-background/95 px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          variant="default"
-          disabled={!mergeable || props.isMergePending}
-          onClick={() => props.onMerge("squash", auto)}
-        >
-          {props.isMergePending ? <Spinner className="size-3" /> : null}
-          {mergeLabel} (squash)
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!mergeable || props.isMergePending}
-          onClick={() => props.onMerge("merge", auto)}
-        >
-          Merge commit
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!mergeable || props.isMergePending}
-          onClick={() => props.onMerge("rebase", auto)}
-        >
-          Rebase
-        </Button>
+        {isAutoMergeEnabled ? (
+          <Button
+            size="sm"
+            variant="default"
+            disabled={props.isDisableAutoMergePending}
+            onClick={props.onDisableAutoMerge}
+          >
+            {props.isDisableAutoMergePending ? <Spinner className="size-3" /> : null}
+            Remove from queue
+          </Button>
+        ) : (
+          <>
+            <Button
+              size="sm"
+              variant="default"
+              disabled={!mergeable || props.isMergePending}
+              onClick={() => props.onMerge("squash", auto)}
+            >
+              {props.isMergePending ? <Spinner className="size-3" /> : null}
+              {mergeLabel} (squash)
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!mergeable || props.isMergePending}
+              onClick={() => props.onMerge("merge", auto)}
+            >
+              Merge commit
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!mergeable || props.isMergePending}
+              onClick={() => props.onMerge("rebase", auto)}
+            >
+              Rebase
+            </Button>
+          </>
+        )}
         {showUpdateBranch && (
           <Button
             size="sm"

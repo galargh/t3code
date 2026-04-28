@@ -18,7 +18,7 @@ import {
   formatGitHubPullRequestChecksDecodeError,
 } from "../githubPullRequestChecks.ts";
 import {
-  decodeGitHubPullRequestCommentsJson,
+  decodeGitHubPullRequestCommentsObject,
   formatGitHubPullRequestCommentsDecodeError,
 } from "../githubPullRequestComments.ts";
 import {
@@ -36,7 +36,8 @@ type GitHubCliOperation =
   | "getPullRequestComments"
   | "mergePullRequest"
   | "rerunWorkflowRun"
-  | "updatePullRequestBranch";
+  | "updatePullRequestBranch"
+  | "disablePullRequestAutoMerge";
 
 function normalizeGitHubCliError(operation: GitHubCliOperation, error: unknown): GitHubCliError {
   if (error instanceof Error) {
@@ -125,6 +126,102 @@ function decodeGitHubJson<S extends Schema.Top>(
         }),
     ),
   );
+}
+
+/**
+ * GraphQL query used to fetch a PR's review threads (the source of inline
+ * file/line review comments + their resolved state). `gh pr view --json` does
+ * not expose `reviewThreads`, so we fetch via `gh api graphql` keyed off the
+ * PR's GraphQL node id.
+ */
+const REVIEW_THREADS_QUERY = `query($id: ID!) {
+  node(id: $id) {
+    ... on PullRequest {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          comments(first: 100) {
+            nodes {
+              id
+              url
+              body
+              createdAt
+              path
+              line
+              originalLine
+              replyTo { id }
+              author { login }
+            }
+          }
+        }
+      }
+    }
+  }
+}`;
+
+function parseJsonOrFail(
+  raw: string,
+  operation: GitHubCliOperation,
+): Effect.Effect<unknown, GitHubCliError> {
+  return Effect.try({
+    try: () => JSON.parse(raw),
+    catch: (error) =>
+      new GitHubCliError({
+        operation,
+        detail: `GitHub CLI returned non-JSON output: ${error instanceof Error ? error.message : String(error)}`,
+        cause: error,
+      }),
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function extractStringField(value: unknown, key: string): string | null {
+  if (!isRecord(value)) return null;
+  const field = value[key];
+  return typeof field === "string" && field.length > 0 ? field : null;
+}
+
+function extractFieldOrNull(value: unknown, key: string): unknown {
+  if (!isRecord(value)) return null;
+  return value[key] ?? null;
+}
+
+/**
+ * Walk a `gh api graphql` response and return the review threads in the shape
+ * the existing `RawWrapperSchema` expects: an array of `{ id, isResolved,
+ * comments: [...] }` where each comment has an `inReplyTo` field instead of
+ * GraphQL's `replyTo`. Missing intermediate fields produce an empty array
+ * rather than an error — the GraphQL endpoint may legitimately return no
+ * threads.
+ */
+function extractReviewThreads(value: unknown): ReadonlyArray<unknown> {
+  const data = isRecord(value) ? value["data"] : null;
+  const node = isRecord(data) ? data["node"] : null;
+  const threads = isRecord(node) ? node["reviewThreads"] : null;
+  const nodes = isRecord(threads) ? threads["nodes"] : null;
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map((thread) => {
+    if (!isRecord(thread)) return {};
+    const comments = isRecord(thread["comments"]) ? thread["comments"]["nodes"] : null;
+    return {
+      id: thread["id"] ?? null,
+      isResolved: thread["isResolved"] ?? null,
+      comments: Array.isArray(comments)
+        ? comments.map((comment) => {
+            if (!isRecord(comment)) return {};
+            const { replyTo, ...rest } = comment;
+            return {
+              ...rest,
+              inReplyTo: replyTo ?? null,
+            };
+          })
+        : [],
+    };
+  });
 }
 
 const makeGitHubCli = Effect.sync(() => {
@@ -267,7 +364,7 @@ const makeGitHubCli = Effect.sync(() => {
           "view",
           String(input.prNumber),
           "--json",
-          "number,url,title,body,state,isDraft,mergeable,mergeStateStatus,baseRefName,headRefName,author,reviewDecision",
+          "number,url,title,body,state,isDraft,mergeable,mergeStateStatus,baseRefName,headRefName,author,reviewDecision,autoMergeRequest",
         ],
       }).pipe(
         Effect.mapError((error) => {
@@ -306,7 +403,7 @@ const makeGitHubCli = Effect.sync(() => {
           "checks",
           String(input.prNumber),
           "--json",
-          "name,status,conclusion,workflow,detailsUrl,bucket",
+          "name,state,bucket,workflow,link",
         ],
       }).pipe(
         Effect.mapError((error) => {
@@ -339,48 +436,79 @@ const makeGitHubCli = Effect.sync(() => {
               ),
         ),
       ),
-    getPullRequestComments: (input) =>
-      execute({
-        cwd: input.cwd,
-        args: [
-          "pr",
-          "view",
-          String(input.prNumber),
-          "--comments",
-          "--json",
-          "comments,reviews,reviewThreads",
-        ],
-      }).pipe(
-        Effect.mapError((error) => {
-          if (error.operation === "execute" || error.operation === "stdout") {
-            return new GitHubCliError({
+    getPullRequestComments: (input) => {
+      const reTagError = (error: GitHubCliError) =>
+        error.operation === "execute" || error.operation === "stdout"
+          ? new GitHubCliError({
               operation: "getPullRequestComments",
               detail: error.detail,
               ...(error.cause !== undefined ? { cause: error.cause } : {}),
-            });
-          }
-          return error;
-        }),
-        Effect.map((result) => result.stdout.trim()),
-        Effect.flatMap((raw) =>
-          raw.length === 0
-            ? Effect.succeed([])
-            : Effect.sync(() => decodeGitHubPullRequestCommentsJson(raw)).pipe(
-                Effect.flatMap((decoded) => {
-                  if (!Result.isSuccess(decoded)) {
-                    return Effect.fail(
-                      new GitHubCliError({
-                        operation: "getPullRequestComments",
-                        detail: `GitHub CLI returned invalid PR comments JSON: ${formatGitHubPullRequestCommentsDecodeError(decoded.failure)}`,
-                        cause: decoded.failure,
-                      }),
-                    );
-                  }
-                  return Effect.succeed(decoded.success);
-                }),
-              ),
+            })
+          : error;
+
+      const fetchView = execute({
+        cwd: input.cwd,
+        args: ["pr", "view", String(input.prNumber), "--json", "id,comments,reviews"],
+      }).pipe(Effect.mapError(reTagError));
+
+      const fetchThreads = (prNodeId: string) =>
+        execute({
+          cwd: input.cwd,
+          args: [
+            "api",
+            "graphql",
+            "-f",
+            `id=${prNodeId}`,
+            "-f",
+            `query=${REVIEW_THREADS_QUERY}`,
+          ],
+        }).pipe(Effect.mapError(reTagError));
+
+      return fetchView.pipe(
+        Effect.flatMap((viewResult) =>
+          parseJsonOrFail(viewResult.stdout, "getPullRequestComments").pipe(
+            Effect.flatMap((view) => {
+              const prNodeId = extractStringField(view, "id");
+              if (prNodeId === null) {
+                return Effect.fail(
+                  new GitHubCliError({
+                    operation: "getPullRequestComments",
+                    detail: "GitHub CLI returned PR view without an 'id' field.",
+                  }),
+                );
+              }
+              return fetchThreads(prNodeId).pipe(
+                Effect.flatMap((threadsResult) =>
+                  parseJsonOrFail(threadsResult.stdout, "getPullRequestComments").pipe(
+                    Effect.map((threadsRaw) => ({
+                      comments: extractFieldOrNull(view, "comments"),
+                      reviews: extractFieldOrNull(view, "reviews"),
+                      reviewThreads: extractReviewThreads(threadsRaw),
+                    })),
+                  ),
+                ),
+              );
+            }),
+          ),
         ),
-      ),
+        Effect.flatMap((wrapper) =>
+          Effect.sync(() => decodeGitHubPullRequestCommentsObject(wrapper)).pipe(
+            Effect.flatMap((decoded) => {
+              if (!Result.isSuccess(decoded)) {
+                return Effect.fail(
+                  new GitHubCliError({
+                    operation: "getPullRequestComments",
+                    detail: `GitHub CLI returned invalid PR comments JSON: ${formatGitHubPullRequestCommentsDecodeError(decoded.failure)}`,
+                    cause: decoded.failure,
+                  }),
+                );
+              }
+              return Effect.succeed(decoded.success);
+            }),
+          ),
+        ),
+      );
+    },
     mergePullRequest: (input) =>
       execute({
         cwd: input.cwd,
@@ -459,6 +587,23 @@ const makeGitHubCli = Effect.sync(() => {
           if (error.operation === "execute" || error.operation === "stdout") {
             return new GitHubCliError({
               operation: "updatePullRequestBranch",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.asVoid,
+      ),
+    disablePullRequestAutoMerge: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: ["pr", "merge", String(input.prNumber), "--disable-auto"],
+      }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "disablePullRequestAutoMerge",
               detail: error.detail,
               ...(error.cause !== undefined ? { cause: error.cause } : {}),
             });

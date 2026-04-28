@@ -82,6 +82,8 @@ function makeTestLayer(state: {
       Effect.die("rerunPullRequestChecks should not be called in this test"),
     updatePullRequestBranch: () =>
       Effect.die("updatePullRequestBranch should not be called in this test"),
+    disablePullRequestAutoMerge: () =>
+      Effect.die("disablePullRequestAutoMerge should not be called in this test"),
   };
 
   return GitStatusBroadcasterLive.pipe(Layer.provide(Layer.succeed(GitManager, gitManager)));
@@ -291,6 +293,8 @@ describe("GitStatusBroadcasterLive", () => {
             Effect.die("rerunPullRequestChecks should not be called in this test"),
           updatePullRequestBranch: () =>
             Effect.die("updatePullRequestBranch should not be called in this test"),
+          disablePullRequestAutoMerge: () =>
+            Effect.die("disablePullRequestAutoMerge should not be called in this test"),
         } satisfies GitManagerShape),
       ),
     );

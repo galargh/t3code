@@ -1921,6 +1921,15 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     return { prNumber: input.prNumber };
   });
 
+  const disablePullRequestAutoMerge: GitManagerShape["disablePullRequestAutoMerge"] = Effect.fn(
+    "disablePullRequestAutoMerge",
+  )(function* (input) {
+    yield* gitHubCli
+      .disablePullRequestAutoMerge({ cwd: input.cwd, prNumber: input.prNumber })
+      .pipe(Effect.ensuring(invalidateRemoteStatusResultCache(input.cwd)));
+    return { prNumber: input.prNumber };
+  });
+
   return {
     localStatus,
     remoteStatus,
@@ -1937,6 +1946,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     mergePullRequest,
     rerunPullRequestChecks,
     updatePullRequestBranch,
+    disablePullRequestAutoMerge,
   } satisfies GitManagerShape;
 });
 
