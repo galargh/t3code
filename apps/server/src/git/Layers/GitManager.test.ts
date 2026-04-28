@@ -858,6 +858,137 @@ it.layer(GitManagerTestLayer)("GitManager", (it) => {
     }),
   );
 
+  it.effect(
+    "status uses the t3code-pr-number branch config to resolve the PR via gh pr view",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        // Renamed local branch (mimics fork PR checkout) — without the shortcut,
+        // `gh pr list --head t3code/pr-42/feature` would never match the PR.
+        yield* runGit(repoDir, ["checkout", "-b", "t3code/pr-42/feature"]);
+        yield* runGit(repoDir, [
+          "config",
+          "--local",
+          "branch.t3code/pr-42/feature.t3code-pr-number",
+          "42",
+        ]);
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            pullRequest: {
+              number: 42,
+              title: "Recorded PR",
+              url: "https://github.com/pingdotgg/codething-mvp/pull/42",
+              baseRefName: "main",
+              headRefName: "feature",
+              state: "open",
+              isCrossRepository: true,
+              headRepositoryNameWithOwner: "octocat/codething-mvp",
+              headRepositoryOwnerLogin: "octocat",
+            },
+          },
+        });
+
+        const status = yield* manager.status({ cwd: repoDir });
+
+        expect(status.pr).toEqual({
+          number: 42,
+          title: "Recorded PR",
+          url: "https://github.com/pingdotgg/codething-mvp/pull/42",
+          baseBranch: "main",
+          headBranch: "feature",
+          state: "open",
+        });
+        // The shortcut path should hit `pr view 42` and skip every `pr list`.
+        expect(ghCalls).toContain(
+          "pr view 42 --json number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
+        );
+        expect(ghCalls.some((call) => call.startsWith("pr list "))).toBe(false);
+      }),
+  );
+
+  it.effect(
+    "status falls back to gh pr list when the t3code-pr-number config is absent",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/no-shortcut"]);
+        const remoteDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "feature/no-shortcut"]);
+
+        const { manager, ghCalls } = yield* makeManager({
+          ghScenario: {
+            prListSequence: [
+              JSON.stringify([
+                {
+                  number: 99,
+                  title: "Heuristic PR",
+                  url: "https://github.com/pingdotgg/codething-mvp/pull/99",
+                  baseRefName: "main",
+                  headRefName: "feature/no-shortcut",
+                },
+              ]),
+            ],
+          },
+        });
+
+        const status = yield* manager.status({ cwd: repoDir });
+        expect(status.pr?.number).toBe(99);
+        expect(ghCalls.some((call) => call.startsWith("pr list "))).toBe(true);
+      }),
+  );
+
+  it.effect(
+    "preparePullRequestThread records the PR number on the worktree's branch config",
+    () =>
+      Effect.gen(function* () {
+        const repoDir = yield* makeTempDir("t3code-git-manager-");
+        yield* initRepo(repoDir);
+        const remoteDir = yield* createBareRemote();
+        yield* runGit(repoDir, ["remote", "add", "origin", remoteDir]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "main"]);
+        yield* runGit(repoDir, ["checkout", "-b", "feature/pr-metadata"]);
+        fs.writeFileSync(path.join(repoDir, "metadata.txt"), "metadata\n");
+        yield* runGit(repoDir, ["add", "metadata.txt"]);
+        yield* runGit(repoDir, ["commit", "-m", "PR metadata branch"]);
+        yield* runGit(repoDir, ["push", "-u", "origin", "feature/pr-metadata"]);
+        yield* runGit(repoDir, ["push", "origin", "HEAD:refs/pull/64/head"]);
+        yield* runGit(repoDir, ["checkout", "main"]);
+
+        const { manager } = yield* makeManager({
+          ghScenario: {
+            pullRequest: {
+              number: 64,
+              title: "Metadata PR",
+              url: "https://github.com/pingdotgg/codething-mvp/pull/64",
+              baseRefName: "main",
+              headRefName: "feature/pr-metadata",
+              state: "open",
+            },
+          },
+        });
+
+        const result = yield* preparePullRequestThread(manager, {
+          cwd: repoDir,
+          reference: "64",
+          mode: "worktree",
+        });
+
+        expect(result.worktreePath).not.toBeNull();
+        const worktreePath = result.worktreePath as string;
+        const recorded = (yield* runGit(worktreePath, [
+          "config",
+          "--local",
+          "--get",
+          "branch.feature/pr-metadata.t3code-pr-number",
+        ])).stdout.trim();
+        expect(recorded).toBe("64");
+      }),
+  );
+
   it.effect("status returns an explicit non-repo result for non-git directories", () =>
     Effect.gen(function* () {
       const cwd = yield* makeTempDir("t3code-git-manager-non-repo-");
