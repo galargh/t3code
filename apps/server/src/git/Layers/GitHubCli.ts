@@ -13,10 +13,32 @@ import {
   decodeGitHubPullRequestListJson,
   formatGitHubJsonDecodeError,
 } from "../githubPullRequests.ts";
+import {
+  decodeGitHubPullRequestChecksJson,
+  formatGitHubPullRequestChecksDecodeError,
+} from "../githubPullRequestChecks.ts";
+import {
+  decodeGitHubPullRequestCommentsJson,
+  formatGitHubPullRequestCommentsDecodeError,
+} from "../githubPullRequestComments.ts";
+import {
+  decodeGitHubPullRequestDetailJson,
+  formatGitHubPullRequestDetailDecodeError,
+} from "../githubPullRequestDetail.ts";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-function normalizeGitHubCliError(operation: "execute" | "stdout", error: unknown): GitHubCliError {
+type GitHubCliOperation =
+  | "execute"
+  | "stdout"
+  | "getPullRequestDetail"
+  | "getPullRequestChecks"
+  | "getPullRequestComments"
+  | "mergePullRequest"
+  | "rerunWorkflowRun"
+  | "updatePullRequestBranch";
+
+function normalizeGitHubCliError(operation: GitHubCliOperation, error: unknown): GitHubCliError {
   if (error instanceof Error) {
     if (error.message.includes("Command not found: gh")) {
       return new GitHubCliError({
@@ -86,7 +108,11 @@ function normalizeRepositoryCloneUrls(
 function decodeGitHubJson<S extends Schema.Top>(
   raw: string,
   schema: S,
-  operation: "listOpenPullRequests" | "getPullRequest" | "getRepositoryCloneUrls",
+  operation:
+    | GitHubCliOperation
+    | "listOpenPullRequests"
+    | "getPullRequest"
+    | "getRepositoryCloneUrls",
   invalidDetail: string,
 ): Effect.Effect<S["Type"], GitHubCliError, S["DecodingServices"]> {
   return Schema.decodeEffect(Schema.fromJsonString(schema))(raw).pipe(
@@ -232,6 +258,214 @@ const makeGitHubCli = Effect.sync(() => {
         cwd: input.cwd,
         args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
       }).pipe(Effect.asVoid),
+    getPullRequestDetail: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: [
+          "pr",
+          "view",
+          String(input.prNumber),
+          "--json",
+          "number,url,title,body,state,isDraft,mergeable,mergeStateStatus,baseRefName,headRefName,author,reviewDecision",
+        ],
+      }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "getPullRequestDetail",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          Effect.sync(() => decodeGitHubPullRequestDetailJson(raw)).pipe(
+            Effect.flatMap((decoded) => {
+              if (!Result.isSuccess(decoded)) {
+                return Effect.fail(
+                  new GitHubCliError({
+                    operation: "getPullRequestDetail",
+                    detail: `GitHub CLI returned invalid pull request detail JSON: ${formatGitHubPullRequestDetailDecodeError(decoded.failure)}`,
+                    cause: decoded.failure,
+                  }),
+                );
+              }
+              return Effect.succeed(decoded.success);
+            }),
+          ),
+        ),
+      ),
+    getPullRequestChecks: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: [
+          "pr",
+          "checks",
+          String(input.prNumber),
+          "--json",
+          "name,status,conclusion,workflow,detailsUrl,bucket",
+        ],
+      }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "getPullRequestChecks",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          raw.length === 0
+            ? Effect.succeed([])
+            : Effect.sync(() => decodeGitHubPullRequestChecksJson(raw)).pipe(
+                Effect.flatMap((decoded) => {
+                  if (!Result.isSuccess(decoded)) {
+                    return Effect.fail(
+                      new GitHubCliError({
+                        operation: "getPullRequestChecks",
+                        detail: `GitHub CLI returned invalid PR checks JSON: ${formatGitHubPullRequestChecksDecodeError(decoded.failure)}`,
+                        cause: decoded.failure,
+                      }),
+                    );
+                  }
+                  return Effect.succeed(decoded.success);
+                }),
+              ),
+        ),
+      ),
+    getPullRequestComments: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: [
+          "pr",
+          "view",
+          String(input.prNumber),
+          "--comments",
+          "--json",
+          "comments,reviews,reviewThreads",
+        ],
+      }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "getPullRequestComments",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.map((result) => result.stdout.trim()),
+        Effect.flatMap((raw) =>
+          raw.length === 0
+            ? Effect.succeed([])
+            : Effect.sync(() => decodeGitHubPullRequestCommentsJson(raw)).pipe(
+                Effect.flatMap((decoded) => {
+                  if (!Result.isSuccess(decoded)) {
+                    return Effect.fail(
+                      new GitHubCliError({
+                        operation: "getPullRequestComments",
+                        detail: `GitHub CLI returned invalid PR comments JSON: ${formatGitHubPullRequestCommentsDecodeError(decoded.failure)}`,
+                        cause: decoded.failure,
+                      }),
+                    );
+                  }
+                  return Effect.succeed(decoded.success);
+                }),
+              ),
+        ),
+      ),
+    mergePullRequest: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: [
+          "pr",
+          "merge",
+          String(input.prNumber),
+          `--${input.method}`,
+          ...(input.auto ? ["--auto"] : []),
+          ...(input.deleteBranch ? ["--delete-branch"] : []),
+        ],
+      }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "mergePullRequest",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.map((result) => {
+          const stderrLower = result.stderr.toLowerCase();
+          const stdoutLower = result.stdout.toLowerCase();
+          const queued =
+            input.auto === true ||
+            stderrLower.includes("auto-merge") ||
+            stdoutLower.includes("auto-merge") ||
+            stderrLower.includes("merge queue") ||
+            stdoutLower.includes("merge queue");
+          return { status: queued ? ("queued" as const) : ("merged" as const) };
+        }),
+      ),
+    rerunWorkflowRun: (input) => {
+      const args =
+        input.mode === "job"
+          ? input.jobId
+            ? ["run", "rerun", "--job", input.jobId]
+            : null
+          : input.mode === "failed"
+            ? input.workflowRunId
+              ? ["run", "rerun", input.workflowRunId, "--failed"]
+              : null
+            : input.workflowRunId
+              ? ["run", "rerun", input.workflowRunId]
+              : null;
+      if (args === null) {
+        return Effect.fail(
+          new GitHubCliError({
+            operation: "rerunWorkflowRun",
+            detail: "Missing required workflowRunId / jobId for rerun.",
+          }),
+        );
+      }
+      return execute({ cwd: input.cwd, args }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "rerunWorkflowRun",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.asVoid,
+      );
+    },
+    updatePullRequestBranch: (input) =>
+      execute({
+        cwd: input.cwd,
+        args: ["pr", "update-branch", String(input.prNumber)],
+      }).pipe(
+        Effect.mapError((error) => {
+          if (error.operation === "execute" || error.operation === "stdout") {
+            return new GitHubCliError({
+              operation: "updatePullRequestBranch",
+              detail: error.detail,
+              ...(error.cause !== undefined ? { cause: error.cause } : {}),
+            });
+          }
+          return error;
+        }),
+        Effect.asVoid,
+      ),
   } satisfies GitHubCliShape;
 
   return service;

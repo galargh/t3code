@@ -1718,6 +1718,89 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     },
   );
 
+  const getPullRequestDetail: GitManagerShape["getPullRequestDetail"] = Effect.fn(
+    "getPullRequestDetail",
+  )(function* (input) {
+    const detail = yield* gitHubCli.getPullRequestDetail({
+      cwd: input.cwd,
+      prNumber: input.prNumber,
+    });
+    return { detail };
+  });
+
+  const getPullRequestChecks: GitManagerShape["getPullRequestChecks"] = Effect.fn(
+    "getPullRequestChecks",
+  )(function* (input) {
+    const checks = yield* gitHubCli.getPullRequestChecks({
+      cwd: input.cwd,
+      prNumber: input.prNumber,
+    });
+    return { prNumber: input.prNumber, checks };
+  });
+
+  const getPullRequestComments: GitManagerShape["getPullRequestComments"] = Effect.fn(
+    "getPullRequestComments",
+  )(function* (input) {
+    const comments = yield* gitHubCli.getPullRequestComments({
+      cwd: input.cwd,
+      prNumber: input.prNumber,
+    });
+    return { prNumber: input.prNumber, comments };
+  });
+
+  const mergePullRequest: GitManagerShape["mergePullRequest"] = Effect.fn("mergePullRequest")(
+    function* (input) {
+      const result = yield* gitHubCli
+        .mergePullRequest({
+          cwd: input.cwd,
+          prNumber: input.prNumber,
+          method: input.method,
+          ...(input.auto !== undefined ? { auto: input.auto } : {}),
+          ...(input.deleteBranch !== undefined ? { deleteBranch: input.deleteBranch } : {}),
+        })
+        .pipe(Effect.ensuring(invalidateRemoteStatusResultCache(input.cwd)));
+      return {
+        prNumber: input.prNumber,
+        status: result.status,
+      };
+    },
+  );
+
+  const rerunPullRequestChecks: GitManagerShape["rerunPullRequestChecks"] = Effect.fn(
+    "rerunPullRequestChecks",
+  )(function* (input) {
+    const target = input.target;
+    if (target._tag === "job") {
+      yield* gitHubCli.rerunWorkflowRun({
+        cwd: input.cwd,
+        mode: "job",
+        jobId: target.jobId,
+      });
+    } else if (target._tag === "all_failed") {
+      yield* gitHubCli.rerunWorkflowRun({
+        cwd: input.cwd,
+        mode: "failed",
+        workflowRunId: target.workflowRunId,
+      });
+    } else {
+      yield* gitHubCli.rerunWorkflowRun({
+        cwd: input.cwd,
+        mode: "all",
+        workflowRunId: target.workflowRunId,
+      });
+    }
+    return { target };
+  });
+
+  const updatePullRequestBranch: GitManagerShape["updatePullRequestBranch"] = Effect.fn(
+    "updatePullRequestBranch",
+  )(function* (input) {
+    yield* gitHubCli
+      .updatePullRequestBranch({ cwd: input.cwd, prNumber: input.prNumber })
+      .pipe(Effect.ensuring(invalidateRemoteStatusResultCache(input.cwd)));
+    return { prNumber: input.prNumber };
+  });
+
   return {
     localStatus,
     remoteStatus,
@@ -1728,6 +1811,12 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     resolvePullRequest,
     preparePullRequestThread,
     runStackedAction,
+    getPullRequestDetail,
+    getPullRequestChecks,
+    getPullRequestComments,
+    mergePullRequest,
+    rerunPullRequestChecks,
+    updatePullRequestBranch,
   } satisfies GitManagerShape;
 });
 

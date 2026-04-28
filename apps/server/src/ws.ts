@@ -883,6 +883,36 @@ const makeWsRpcLayer = (currentSessionId: AuthSessionId) =>
               .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
             { "rpc.aggregate": "git" },
           ),
+        [WS_METHODS.gitPrDetail]: (input) =>
+          observeRpcEffect(WS_METHODS.gitPrDetail, gitManager.getPullRequestDetail(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitPrChecks]: (input) =>
+          observeRpcEffect(WS_METHODS.gitPrChecks, gitManager.getPullRequestChecks(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitPrComments]: (input) =>
+          observeRpcEffect(WS_METHODS.gitPrComments, gitManager.getPullRequestComments(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitPrMerge]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitPrMerge,
+            gitManager.mergePullRequest(input).pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
+        [WS_METHODS.gitPrRerunChecks]: (input) =>
+          observeRpcEffect(WS_METHODS.gitPrRerunChecks, gitManager.rerunPullRequestChecks(input), {
+            "rpc.aggregate": "git",
+          }),
+        [WS_METHODS.gitPrUpdateBranch]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.gitPrUpdateBranch,
+            gitManager
+              .updatePullRequestBranch(input)
+              .pipe(Effect.tap(() => refreshGitStatus(input.cwd))),
+            { "rpc.aggregate": "git" },
+          ),
         [WS_METHODS.gitListBranches]: (input) =>
           observeRpcEffect(WS_METHODS.gitListBranches, git.listBranches(input), {
             "rpc.aggregate": "git",

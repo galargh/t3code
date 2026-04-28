@@ -432,3 +432,182 @@ export const GitActionProgressEvent = Schema.Union([
   GitActionFailedEvent,
 ]);
 export type GitActionProgressEvent = typeof GitActionProgressEvent.Type;
+
+// =====================================================================
+// PR status panel — detail / checks / comments / merge / rerun / update
+// =====================================================================
+
+export const GitPrMergeStateStatus = Schema.Literals([
+  "BEHIND",
+  "BLOCKED",
+  "CLEAN",
+  "DIRTY",
+  "DRAFT",
+  "HAS_HOOKS",
+  "UNKNOWN",
+  "UNSTABLE",
+]);
+export type GitPrMergeStateStatus = typeof GitPrMergeStateStatus.Type;
+
+export const GitPrMergeable = Schema.Literals(["MERGEABLE", "CONFLICTING", "UNKNOWN"]);
+export type GitPrMergeable = typeof GitPrMergeable.Type;
+
+export const GitPrReviewDecision = Schema.NullOr(
+  Schema.Literals(["APPROVED", "CHANGES_REQUESTED", "REVIEW_REQUIRED", "COMMENTED"]),
+);
+export type GitPrReviewDecision = typeof GitPrReviewDecision.Type;
+
+export const GitPrAuthor = Schema.Struct({
+  login: TrimmedNonEmptyStringSchema,
+  name: Schema.NullOr(Schema.String),
+});
+export type GitPrAuthor = typeof GitPrAuthor.Type;
+
+export const GitPullRequestDetail = Schema.Struct({
+  number: PositiveInt,
+  url: Schema.String,
+  title: TrimmedNonEmptyStringSchema,
+  body: Schema.String,
+  state: GitPullRequestState,
+  isDraft: Schema.Boolean,
+  mergeable: GitPrMergeable,
+  mergeStateStatus: GitPrMergeStateStatus,
+  baseRefName: TrimmedNonEmptyStringSchema,
+  headRefName: TrimmedNonEmptyStringSchema,
+  author: GitPrAuthor,
+  reviewDecision: GitPrReviewDecision,
+});
+export type GitPullRequestDetail = typeof GitPullRequestDetail.Type;
+
+export const GitPrCheckStatus = Schema.Literals([
+  "QUEUED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "WAITING",
+  "PENDING",
+  "REQUESTED",
+]);
+export type GitPrCheckStatus = typeof GitPrCheckStatus.Type;
+
+export const GitPrCheckConclusion = Schema.NullOr(
+  Schema.Literals([
+    "SUCCESS",
+    "FAILURE",
+    "NEUTRAL",
+    "CANCELLED",
+    "SKIPPED",
+    "TIMED_OUT",
+    "ACTION_REQUIRED",
+    "STALE",
+  ]),
+);
+export type GitPrCheckConclusion = typeof GitPrCheckConclusion.Type;
+
+export const GitPrCheckBucket = Schema.Literals(["pass", "fail", "pending", "skipping", "cancel"]);
+export type GitPrCheckBucket = typeof GitPrCheckBucket.Type;
+
+export const GitPullRequestCheck = Schema.Struct({
+  name: TrimmedNonEmptyStringSchema,
+  status: GitPrCheckStatus,
+  conclusion: GitPrCheckConclusion,
+  workflow: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  detailsUrl: Schema.NullOr(Schema.String),
+  workflowRunId: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  jobId: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  bucket: GitPrCheckBucket,
+});
+export type GitPullRequestCheck = typeof GitPullRequestCheck.Type;
+
+export const GitPullRequestChecksResult = Schema.Struct({
+  prNumber: PositiveInt,
+  checks: Schema.Array(GitPullRequestCheck),
+});
+export type GitPullRequestChecksResult = typeof GitPullRequestChecksResult.Type;
+
+export const GitPrCommentKind = Schema.Literals(["issue", "review", "review_thread"]);
+export type GitPrCommentKind = typeof GitPrCommentKind.Type;
+
+export const GitPullRequestComment = Schema.Struct({
+  id: TrimmedNonEmptyStringSchema,
+  kind: GitPrCommentKind,
+  author: TrimmedNonEmptyStringSchema,
+  body: Schema.String,
+  createdAt: Schema.String,
+  url: Schema.NullOr(Schema.String),
+  filePath: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  line: Schema.NullOr(PositiveInt),
+  threadId: Schema.NullOr(TrimmedNonEmptyStringSchema),
+  isResolved: Schema.NullOr(Schema.Boolean),
+  inReplyToId: Schema.NullOr(TrimmedNonEmptyStringSchema),
+});
+export type GitPullRequestComment = typeof GitPullRequestComment.Type;
+
+export const GitPullRequestCommentsResult = Schema.Struct({
+  prNumber: PositiveInt,
+  comments: Schema.Array(GitPullRequestComment),
+});
+export type GitPullRequestCommentsResult = typeof GitPullRequestCommentsResult.Type;
+
+export const GitPullRequestForCwdInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  prNumber: PositiveInt,
+});
+export type GitPullRequestForCwdInput = typeof GitPullRequestForCwdInput.Type;
+
+export const GitPullRequestDetailResult = Schema.Struct({
+  detail: GitPullRequestDetail,
+});
+export type GitPullRequestDetailResult = typeof GitPullRequestDetailResult.Type;
+
+export const GitPrMergeMethod = Schema.Literals(["merge", "squash", "rebase"]);
+export type GitPrMergeMethod = typeof GitPrMergeMethod.Type;
+
+export const GitPullRequestMergeInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  prNumber: PositiveInt,
+  method: GitPrMergeMethod,
+  auto: Schema.optional(Schema.Boolean),
+  deleteBranch: Schema.optional(Schema.Boolean),
+});
+export type GitPullRequestMergeInput = typeof GitPullRequestMergeInput.Type;
+
+export const GitPullRequestMergeResult = Schema.Struct({
+  prNumber: PositiveInt,
+  status: Schema.Literals(["merged", "queued"]),
+});
+export type GitPullRequestMergeResult = typeof GitPullRequestMergeResult.Type;
+
+export const GitPrRerunChecksTarget = Schema.Union([
+  Schema.TaggedStruct("workflow_run", {
+    workflowRunId: TrimmedNonEmptyStringSchema,
+  }),
+  Schema.TaggedStruct("all_failed", {
+    workflowRunId: TrimmedNonEmptyStringSchema,
+  }),
+  Schema.TaggedStruct("job", {
+    jobId: TrimmedNonEmptyStringSchema,
+  }),
+]);
+export type GitPrRerunChecksTarget = typeof GitPrRerunChecksTarget.Type;
+
+export const GitPullRequestRerunChecksInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  target: GitPrRerunChecksTarget,
+});
+export type GitPullRequestRerunChecksInput = typeof GitPullRequestRerunChecksInput.Type;
+
+export const GitPullRequestRerunChecksResult = Schema.Struct({
+  target: GitPrRerunChecksTarget,
+});
+export type GitPullRequestRerunChecksResult = typeof GitPullRequestRerunChecksResult.Type;
+
+export const GitPullRequestUpdateBranchInput = Schema.Struct({
+  cwd: TrimmedNonEmptyStringSchema,
+  prNumber: PositiveInt,
+});
+export type GitPullRequestUpdateBranchInput = typeof GitPullRequestUpdateBranchInput.Type;
+
+export const GitPullRequestUpdateBranchResult = Schema.Struct({
+  prNumber: PositiveInt,
+});
+export type GitPullRequestUpdateBranchResult = typeof GitPullRequestUpdateBranchResult.Type;

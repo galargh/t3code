@@ -97,6 +97,12 @@ function createTestClient() {
       init: vi.fn(async () => undefined),
       resolvePullRequest: vi.fn(async () => undefined),
       preparePullRequestThread: vi.fn(async () => undefined),
+      prDetail: vi.fn(async () => undefined),
+      prChecks: vi.fn(async () => undefined),
+      prComments: vi.fn(async () => undefined),
+      prMerge: vi.fn(async () => undefined),
+      prRerunChecks: vi.fn(async () => undefined),
+      prUpdateBranch: vi.fn(async () => undefined),
     },
   } as unknown as WsRpcClient;
 

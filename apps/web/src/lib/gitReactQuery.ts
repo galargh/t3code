@@ -1,6 +1,8 @@
 import {
   type EnvironmentId,
   type GitActionProgressEvent,
+  type GitPrMergeMethod,
+  type GitPrRerunChecksTarget,
   type GitStackedAction,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -23,6 +25,14 @@ export const gitQueryKeys = {
     ["git", "branches", environmentId ?? null, cwd] as const,
   branchSearch: (environmentId: EnvironmentId | null, cwd: string | null, query: string) =>
     ["git", "branches", environmentId ?? null, cwd, "search", query] as const,
+  prAll: (environmentId: EnvironmentId | null, cwd: string | null, prNumber: number | null) =>
+    ["git", "pr", environmentId ?? null, cwd, prNumber] as const,
+  prDetail: (environmentId: EnvironmentId | null, cwd: string | null, prNumber: number | null) =>
+    ["git", "pr", environmentId ?? null, cwd, prNumber, "detail"] as const,
+  prChecks: (environmentId: EnvironmentId | null, cwd: string | null, prNumber: number | null) =>
+    ["git", "pr", environmentId ?? null, cwd, prNumber, "checks"] as const,
+  prComments: (environmentId: EnvironmentId | null, cwd: string | null, prNumber: number | null) =>
+    ["git", "pr", environmentId ?? null, cwd, prNumber, "comments"] as const,
 };
 
 export const gitMutationKeys = {
@@ -36,6 +46,15 @@ export const gitMutationKeys = {
     ["git", "mutation", "pull", environmentId ?? null, cwd] as const,
   preparePullRequestThread: (environmentId: EnvironmentId | null, cwd: string | null) =>
     ["git", "mutation", "prepare-pull-request-thread", environmentId ?? null, cwd] as const,
+  prMerge: (environmentId: EnvironmentId | null, cwd: string | null, prNumber: number | null) =>
+    ["git", "mutation", "pr-merge", environmentId ?? null, cwd, prNumber] as const,
+  prRerunChecks: (environmentId: EnvironmentId | null, cwd: string | null) =>
+    ["git", "mutation", "pr-rerun-checks", environmentId ?? null, cwd] as const,
+  prUpdateBranch: (
+    environmentId: EnvironmentId | null,
+    cwd: string | null,
+    prNumber: number | null,
+  ) => ["git", "mutation", "pr-update-branch", environmentId ?? null, cwd, prNumber] as const,
 };
 
 export function invalidateGitQueries(
@@ -281,6 +300,187 @@ export function gitPreparePullRequestThreadMutationOptions(input: {
     },
     onSuccess: async () => {
       await invalidateGitBranchQueries(input.queryClient, input.environmentId, input.cwd);
+    },
+  });
+}
+
+const PR_DETAIL_STALE_TIME_MS = 30_000;
+
+export function invalidatePrQueries(input: {
+  queryClient: QueryClient;
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+}) {
+  return input.queryClient.invalidateQueries({
+    queryKey: gitQueryKeys.prAll(input.environmentId, input.cwd, input.prNumber),
+  });
+}
+
+export function prDetailQueryOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  enabled?: boolean;
+}) {
+  return queryOptions({
+    queryKey: gitQueryKeys.prDetail(input.environmentId, input.cwd, input.prNumber),
+    queryFn: async () => {
+      if (!input.environmentId || !input.cwd || input.prNumber === null) {
+        throw new Error("PR detail is unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prDetail({ cwd: input.cwd, prNumber: input.prNumber });
+    },
+    enabled:
+      (input.enabled ?? true) &&
+      input.environmentId !== null &&
+      input.cwd !== null &&
+      input.prNumber !== null,
+    staleTime: PR_DETAIL_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+export function prChecksQueryOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  enabled?: boolean;
+}) {
+  return queryOptions({
+    queryKey: gitQueryKeys.prChecks(input.environmentId, input.cwd, input.prNumber),
+    queryFn: async () => {
+      if (!input.environmentId || !input.cwd || input.prNumber === null) {
+        throw new Error("PR checks are unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prChecks({ cwd: input.cwd, prNumber: input.prNumber });
+    },
+    enabled:
+      (input.enabled ?? true) &&
+      input.environmentId !== null &&
+      input.cwd !== null &&
+      input.prNumber !== null,
+    staleTime: PR_DETAIL_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+export function prCommentsQueryOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  enabled?: boolean;
+}) {
+  return queryOptions({
+    queryKey: gitQueryKeys.prComments(input.environmentId, input.cwd, input.prNumber),
+    queryFn: async () => {
+      if (!input.environmentId || !input.cwd || input.prNumber === null) {
+        throw new Error("PR comments are unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prComments({ cwd: input.cwd, prNumber: input.prNumber });
+    },
+    enabled:
+      (input.enabled ?? true) &&
+      input.environmentId !== null &&
+      input.cwd !== null &&
+      input.prNumber !== null,
+    staleTime: PR_DETAIL_STALE_TIME_MS,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+}
+
+export interface PrMergeMutationVariables {
+  method: GitPrMergeMethod;
+  auto?: boolean;
+  deleteBranch?: boolean;
+}
+
+export function prMergeMutationOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.prMerge(input.environmentId, input.cwd, input.prNumber),
+    mutationFn: async (vars: PrMergeMutationVariables) => {
+      if (!input.environmentId || !input.cwd || input.prNumber === null) {
+        throw new Error("PR merge is unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prMerge({
+        cwd: input.cwd,
+        prNumber: input.prNumber,
+        method: vars.method,
+        ...(vars.auto !== undefined ? { auto: vars.auto } : {}),
+        ...(vars.deleteBranch !== undefined ? { deleteBranch: vars.deleteBranch } : {}),
+      });
+    },
+    onSuccess: async () => {
+      await invalidatePrQueries({
+        queryClient: input.queryClient,
+        environmentId: input.environmentId,
+        cwd: input.cwd,
+        prNumber: input.prNumber,
+      });
+    },
+  });
+}
+
+export function prRerunChecksMutationOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.prRerunChecks(input.environmentId, input.cwd),
+    mutationFn: async (target: GitPrRerunChecksTarget) => {
+      if (!input.environmentId || !input.cwd) {
+        throw new Error("PR rerun checks is unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prRerunChecks({ cwd: input.cwd, target });
+    },
+    onSuccess: async () => {
+      await invalidatePrQueries({
+        queryClient: input.queryClient,
+        environmentId: input.environmentId,
+        cwd: input.cwd,
+        prNumber: input.prNumber,
+      });
+    },
+  });
+}
+
+export function prUpdateBranchMutationOptions(input: {
+  environmentId: EnvironmentId | null;
+  cwd: string | null;
+  prNumber: number | null;
+  queryClient: QueryClient;
+}) {
+  return mutationOptions({
+    mutationKey: gitMutationKeys.prUpdateBranch(input.environmentId, input.cwd, input.prNumber),
+    mutationFn: async () => {
+      if (!input.environmentId || !input.cwd || input.prNumber === null) {
+        throw new Error("PR update-branch is unavailable.");
+      }
+      const api = ensureEnvironmentApi(input.environmentId);
+      return api.git.prUpdateBranch({ cwd: input.cwd, prNumber: input.prNumber });
+    },
+    onSuccess: async () => {
+      await invalidatePrQueries({
+        queryClient: input.queryClient,
+        environmentId: input.environmentId,
+        cwd: input.cwd,
+        prNumber: input.prNumber,
+      });
     },
   });
 }

@@ -589,6 +589,48 @@ function createGitHubCliWithFakeGh(scenario: FakeGhScenario = {}): {
           cwd: input.cwd,
           args: ["pr", "checkout", input.reference, ...(input.force ? ["--force"] : [])],
         }).pipe(Effect.asVoid),
+      getPullRequestDetail: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "getPullRequestDetail",
+            detail: "fake gh: getPullRequestDetail not implemented in this scenario",
+          }),
+        ),
+      getPullRequestChecks: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "getPullRequestChecks",
+            detail: "fake gh: getPullRequestChecks not implemented in this scenario",
+          }),
+        ),
+      getPullRequestComments: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "getPullRequestComments",
+            detail: "fake gh: getPullRequestComments not implemented in this scenario",
+          }),
+        ),
+      mergePullRequest: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "mergePullRequest",
+            detail: "fake gh: mergePullRequest not implemented in this scenario",
+          }),
+        ),
+      rerunWorkflowRun: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "rerunWorkflowRun",
+            detail: "fake gh: rerunWorkflowRun not implemented in this scenario",
+          }),
+        ),
+      updatePullRequestBranch: () =>
+        Effect.fail(
+          new GitHubCliError({
+            operation: "updatePullRequestBranch",
+            detail: "fake gh: updatePullRequestBranch not implemented in this scenario",
+          }),
+        ),
     },
     ghCalls,
   };

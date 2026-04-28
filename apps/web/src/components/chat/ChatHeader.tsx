@@ -9,7 +9,8 @@ import { scopeThreadRef } from "@t3tools/client-runtime";
 import { memo } from "react";
 import GitActionsControl from "../GitActionsControl";
 import { type DraftId } from "~/composerDraftStore";
-import { DiffIcon, TerminalSquareIcon } from "lucide-react";
+import { useGitStatus } from "~/lib/gitStatusState";
+import { DiffIcon, GitPullRequestIcon, TerminalSquareIcon } from "lucide-react";
 import { Badge } from "../ui/badge";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import ProjectScriptsControl, { type NewProjectScriptInput } from "../ProjectScriptsControl";
@@ -35,12 +36,14 @@ interface ChatHeaderProps {
   diffToggleShortcutLabel: string | null;
   gitCwd: string | null;
   diffOpen: boolean;
+  prOpen: boolean;
   onRunProjectScript: (script: ProjectScript) => void;
   onAddProjectScript: (input: NewProjectScriptInput) => Promise<void>;
   onUpdateProjectScript: (scriptId: string, input: NewProjectScriptInput) => Promise<void>;
   onDeleteProjectScript: (scriptId: string) => Promise<void>;
   onToggleTerminal: () => void;
   onToggleDiff: () => void;
+  onTogglePr: () => void;
 }
 
 export const ChatHeader = memo(function ChatHeader({
@@ -61,13 +64,26 @@ export const ChatHeader = memo(function ChatHeader({
   diffToggleShortcutLabel,
   gitCwd,
   diffOpen,
+  prOpen,
   onRunProjectScript,
   onAddProjectScript,
   onUpdateProjectScript,
   onDeleteProjectScript,
   onToggleTerminal,
   onToggleDiff,
+  onTogglePr,
 }: ChatHeaderProps) {
+  const gitStatus = useGitStatus({
+    environmentId: activeThreadEnvironmentId,
+    cwd: gitCwd,
+  });
+  const trackedPr = gitStatus.data?.pr ?? null;
+  const prAvailable = isGitRepo && trackedPr !== null;
+  const prTooltip = !isGitRepo
+    ? "PR panel is unavailable because this project is not a git repository."
+    : trackedPr === null
+      ? "No open PR for this branch."
+      : `Toggle PR panel (#${trackedPr.number})`;
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
       <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden sm:gap-3">
@@ -138,6 +154,24 @@ export const ChatHeader = memo(function ChatHeader({
                 ? `Toggle terminal drawer (${terminalToggleShortcutLabel})`
                 : "Toggle terminal drawer"}
           </TooltipPopup>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Toggle
+                className="shrink-0"
+                pressed={prOpen}
+                onPressedChange={onTogglePr}
+                aria-label="Toggle PR panel"
+                variant="outline"
+                size="xs"
+                disabled={!prAvailable}
+              >
+                <GitPullRequestIcon className="size-3" />
+              </Toggle>
+            }
+          />
+          <TooltipPopup side="bottom">{prTooltip}</TooltipPopup>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger

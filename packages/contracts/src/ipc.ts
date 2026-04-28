@@ -4,7 +4,17 @@ import type {
   GitCreateBranchInput,
   GitPreparePullRequestThreadInput,
   GitPreparePullRequestThreadResult,
+  GitPullRequestChecksResult,
+  GitPullRequestCommentsResult,
+  GitPullRequestDetailResult,
+  GitPullRequestForCwdInput,
+  GitPullRequestMergeInput,
+  GitPullRequestMergeResult,
   GitPullRequestRefInput,
+  GitPullRequestRerunChecksInput,
+  GitPullRequestRerunChecksResult,
+  GitPullRequestUpdateBranchInput,
+  GitPullRequestUpdateBranchResult,
   GitCreateWorktreeInput,
   GitCreateWorktreeResult,
   GitInitInput,
@@ -259,6 +269,16 @@ export interface EnvironmentApi {
     preparePullRequestThread: (
       input: GitPreparePullRequestThreadInput,
     ) => Promise<GitPreparePullRequestThreadResult>;
+    prDetail: (input: GitPullRequestForCwdInput) => Promise<GitPullRequestDetailResult>;
+    prChecks: (input: GitPullRequestForCwdInput) => Promise<GitPullRequestChecksResult>;
+    prComments: (input: GitPullRequestForCwdInput) => Promise<GitPullRequestCommentsResult>;
+    prMerge: (input: GitPullRequestMergeInput) => Promise<GitPullRequestMergeResult>;
+    prRerunChecks: (
+      input: GitPullRequestRerunChecksInput,
+    ) => Promise<GitPullRequestRerunChecksResult>;
+    prUpdateBranch: (
+      input: GitPullRequestUpdateBranchInput,
+    ) => Promise<GitPullRequestUpdateBranchResult>;
     pull: (input: GitPullInput) => Promise<GitPullResult>;
     refreshStatus: (input: GitStatusInput) => Promise<GitStatusResult>;
     onStatus: (
