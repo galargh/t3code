@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 import { TrimmedNonEmptyString } from "./baseSchemas.ts";
 
-export const EditorLaunchStyle = Schema.Literals(["direct-path", "goto", "line-column"]);
+export const EditorLaunchStyle = Schema.Literals([
+  "direct-path",
+  "goto",
+  "line-column",
+  "macos-open",
+  "macos-open-cwd-flag",
+]);
 export type EditorLaunchStyle = typeof EditorLaunchStyle.Type;
 
 type EditorDefinition = {
@@ -10,6 +16,7 @@ type EditorDefinition = {
   readonly commands: readonly [string, ...string[]] | null;
   readonly baseArgs?: readonly string[];
   readonly launchStyle: EditorLaunchStyle;
+  readonly macosAppBundle?: string;
 };
 
 export const EDITORS = [
@@ -27,6 +34,34 @@ export const EDITORS = [
   { id: "zed", label: "Zed", commands: ["zed", "zeditor"], launchStyle: "direct-path" },
   { id: "antigravity", label: "Antigravity", commands: ["agy"], launchStyle: "goto" },
   { id: "idea", label: "IntelliJ IDEA", commands: ["idea"], launchStyle: "line-column" },
+  {
+    id: "ghostty",
+    label: "Ghostty",
+    commands: null,
+    macosAppBundle: "Ghostty",
+    launchStyle: "macos-open-cwd-flag",
+  },
+  {
+    id: "iterm2",
+    label: "iTerm2",
+    commands: null,
+    macosAppBundle: "iTerm",
+    launchStyle: "macos-open",
+  },
+  {
+    id: "terminal",
+    label: "Terminal",
+    commands: null,
+    macosAppBundle: "Terminal",
+    launchStyle: "macos-open",
+  },
+  {
+    id: "warp",
+    label: "Warp",
+    commands: null,
+    macosAppBundle: "Warp",
+    launchStyle: "macos-open",
+  },
   { id: "file-manager", label: "File Manager", commands: null, launchStyle: "direct-path" },
 ] as const satisfies ReadonlyArray<EditorDefinition>;
 

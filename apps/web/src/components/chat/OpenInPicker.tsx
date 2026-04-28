@@ -2,7 +2,7 @@ import { EditorId, type ResolvedKeybindingsConfig } from "@t3tools/contracts";
 import { memo, useCallback, useEffect, useMemo } from "react";
 import { isOpenFavoriteEditorShortcut, shortcutLabelForCommand } from "../../keybindings";
 import { usePreferredEditor } from "../../editorPreferences";
-import { ChevronDownIcon, FolderClosedIcon } from "lucide-react";
+import { ChevronDownIcon, FolderClosedIcon, GhostIcon, TerminalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Group, GroupSeparator } from "../ui/group";
 import { Menu, MenuItem, MenuPopup, MenuShortcut, MenuTrigger } from "../ui/menu";
@@ -67,6 +67,26 @@ const resolveOptions = (platform: string, availableEditors: ReadonlyArray<Editor
       label: "IntelliJ IDEA",
       Icon: IntelliJIdeaIcon,
       value: "idea",
+    },
+    {
+      label: "Ghostty",
+      Icon: GhostIcon,
+      value: "ghostty",
+    },
+    {
+      label: "iTerm2",
+      Icon: TerminalIcon,
+      value: "iterm2",
+    },
+    {
+      label: "Terminal",
+      Icon: TerminalIcon,
+      value: "terminal",
+    },
+    {
+      label: "Warp",
+      Icon: TerminalIcon,
+      value: "warp",
     },
     {
       label: isMacPlatform(platform)

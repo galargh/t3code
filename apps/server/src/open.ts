@@ -7,6 +7,9 @@
  * @module Open
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join as joinPath } from "node:path";
 
 import { EDITORS, OpenError, type EditorId } from "@t3tools/contracts";
 import { isCommandAvailable, type CommandAvailabilityOptions } from "@t3tools/shared/shell";
@@ -67,6 +70,10 @@ function resolveCommandEditorArgs(
       const { path, line, column } = parsedTarget;
       return [...(line ? ["--line", line] : []), ...(column ? ["--column", column] : []), path];
     }
+    case "macos-open":
+    case "macos-open-cwd-flag":
+      // Handled by resolveEditorLaunch directly via resolveMacosOpenLaunch.
+      return [target];
   }
 }
 
@@ -101,6 +108,25 @@ function fileManagerCommandForPlatform(platform: NodeJS.Platform): string {
   }
 }
 
+function macosAppCandidatePaths(appName: string, env: NodeJS.ProcessEnv): ReadonlyArray<string> {
+  const home = env.HOME ?? homedir();
+  return [
+    `/Applications/${appName}.app`,
+    joinPath(home, "Applications", `${appName}.app`),
+    `/System/Applications/${appName}.app`,
+    `/System/Applications/Utilities/${appName}.app`,
+  ];
+}
+
+export function isMacosAppInstalled(
+  appName: string,
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  if (platform !== "darwin") return false;
+  return macosAppCandidatePaths(appName, env).some((path) => existsSync(path));
+}
+
 export function resolveAvailableEditors(
   platform: NodeJS.Platform = process.platform,
   env: NodeJS.ProcessEnv = process.env,
@@ -109,6 +135,13 @@ export function resolveAvailableEditors(
 
   for (const editor of EDITORS) {
     if (editor.commands === null) {
+      if ("macosAppBundle" in editor && editor.macosAppBundle) {
+        if (isMacosAppInstalled(editor.macosAppBundle, platform, env)) {
+          available.push(editor.id);
+        }
+        continue;
+      }
+
       const command = fileManagerCommandForPlatform(platform);
       if (isCommandAvailable(command, { platform, env })) {
         available.push(editor.id);
@@ -164,6 +197,22 @@ export const resolveEditorLaunch = Effect.fn("resolveEditorLaunch")(function* (
   const editorDef = EDITORS.find((editor) => editor.id === input.editor);
   if (!editorDef) {
     return yield* new OpenError({ message: `Unknown editor: ${input.editor}` });
+  }
+
+  if (editorDef.launchStyle === "macos-open" || editorDef.launchStyle === "macos-open-cwd-flag") {
+    const appBundle = "macosAppBundle" in editorDef ? editorDef.macosAppBundle : undefined;
+    if (!appBundle) {
+      return yield* new OpenError({
+        message: `Editor ${input.editor} is missing macosAppBundle`,
+      });
+    }
+    if (editorDef.launchStyle === "macos-open") {
+      return { command: "open", args: ["-a", appBundle, input.cwd] };
+    }
+    return {
+      command: "open",
+      args: ["-na", appBundle, "--args", `--working-directory=${input.cwd}`],
+    };
   }
 
   if (editorDef.commands) {
