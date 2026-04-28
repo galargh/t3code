@@ -1183,13 +1183,24 @@ export type OrchestrationCleanupThreadOrphansInput =
   typeof OrchestrationCleanupThreadOrphansInput.Type;
 
 /**
- * Result counts for the per-thread orphan cleanup. Each field is the number of
- * projection rows that were dropped for that table.
+ * Result counts for the per-thread cleanup/repair.
+ *
+ * - `deletedActivities` / `deletedMessages` / `deletedProposedPlans`: orphan
+ *   rows in the corresponding projection table whose `turn_id` no longer
+ *   matched any row in `projection_turns`.
+ * - `resetSessions`: 0 or 1; the `projection_thread_sessions` row was reset
+ *   to `status='stopped'` because its `active_turn_id` referenced a missing
+ *   or terminal turn (see `OrchestrationThreadCleanup` for the predicate).
+ * - `resetTurns`: number of `projection_turns` rows that were stuck in
+ *   `state='running'` with `completed_at IS NULL` while a newer turn had
+ *   already settled, and were therefore marked `'interrupted'`.
  */
 export const OrchestrationCleanupThreadOrphansResult = Schema.Struct({
   deletedActivities: NonNegativeInt,
   deletedMessages: NonNegativeInt,
   deletedProposedPlans: NonNegativeInt,
+  resetSessions: NonNegativeInt,
+  resetTurns: NonNegativeInt,
 });
 export type OrchestrationCleanupThreadOrphansResult =
   typeof OrchestrationCleanupThreadOrphansResult.Type;

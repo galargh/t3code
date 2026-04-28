@@ -448,6 +448,8 @@ describe("cleanupAndResyncThreadDetailSubscription", () => {
       deletedActivities: 0,
       deletedMessages: 0,
       deletedProposedPlans: 0,
+      resetSessions: 0,
+      resetTurns: 0,
     });
     mockCreateWsRpcClient.mockReturnValue({
       orchestration: {
@@ -490,7 +492,13 @@ describe("cleanupAndResyncThreadDetailSubscription", () => {
     const callOrder: Array<string> = [];
     mockCleanupThreadOrphans.mockImplementation(async () => {
       callOrder.push("cleanup");
-      return { deletedActivities: 2, deletedMessages: 1, deletedProposedPlans: 0 };
+      return {
+        deletedActivities: 2,
+        deletedMessages: 1,
+        deletedProposedPlans: 0,
+        resetSessions: 0,
+        resetTurns: 0,
+      };
     });
     mockSubscribeThread.mockImplementation(() => {
       callOrder.push("subscribe");
@@ -507,7 +515,13 @@ describe("cleanupAndResyncThreadDetailSubscription", () => {
 
     expect(outcome).toEqual({
       kind: "ok",
-      cleanup: { deletedActivities: 2, deletedMessages: 1, deletedProposedPlans: 0 },
+      cleanup: {
+        deletedActivities: 2,
+        deletedMessages: 1,
+        deletedProposedPlans: 0,
+        resetSessions: 0,
+        resetTurns: 0,
+      },
       resyncIssued: true,
     });
     expect(mockCleanupThreadOrphans).toHaveBeenCalledWith({ threadId });
@@ -536,6 +550,8 @@ describe("cleanupAndResyncThreadDetailSubscription", () => {
       deletedActivities: 1,
       deletedMessages: 0,
       deletedProposedPlans: 0,
+      resetSessions: 0,
+      resetTurns: 0,
     });
 
     const outcome = await cleanupAndResyncThreadDetailSubscription(environmentId, threadId);
@@ -543,7 +559,13 @@ describe("cleanupAndResyncThreadDetailSubscription", () => {
     // No retainer, so resync cannot be issued; cleanup still runs.
     expect(outcome).toEqual({
       kind: "ok",
-      cleanup: { deletedActivities: 1, deletedMessages: 0, deletedProposedPlans: 0 },
+      cleanup: {
+        deletedActivities: 1,
+        deletedMessages: 0,
+        deletedProposedPlans: 0,
+        resetSessions: 0,
+        resetTurns: 0,
+      },
       resyncIssued: false,
     });
     expect(mockCleanupThreadOrphans).toHaveBeenCalledTimes(1);

@@ -494,6 +494,8 @@ const buildAppUnderTest = (options?: {
               deletedActivities: 0,
               deletedMessages: 0,
               deletedProposedPlans: 0,
+              resetSessions: 0,
+              resetTurns: 0,
             }),
           ...options?.layers?.orchestrationThreadCleanup,
         }),
