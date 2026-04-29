@@ -470,6 +470,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
             deletedAt: null,
+            mutedAt: null,
           });
           return;
 
@@ -506,6 +507,36 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...existingRow.value,
             deletedAt: event.payload.deletedAt,
             updatedAt: event.payload.deletedAt,
+          });
+          return;
+        }
+
+        case "project.muted": {
+          const existingRow = yield* projectionProjectRepository.getById({
+            projectId: event.payload.projectId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionProjectRepository.upsert({
+            ...existingRow.value,
+            mutedAt: event.payload.mutedAt,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "project.unmuted": {
+          const existingRow = yield* projectionProjectRepository.getById({
+            projectId: event.payload.projectId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionProjectRepository.upsert({
+            ...existingRow.value,
+            mutedAt: null,
+            updatedAt: event.payload.updatedAt,
           });
           return;
         }
@@ -575,6 +606,15 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             createdAt: event.payload.createdAt,
             updatedAt: event.payload.updatedAt,
             archivedAt: null,
+            mutedAt: null,
+            prNumber: null,
+            prTitle: null,
+            prUrl: null,
+            prState: null,
+            prBaseBranch: null,
+            prHeadBranch: null,
+            prBranch: null,
+            prRefreshedAt: null,
             latestUserMessageAt: null,
             pendingApprovalCount: 0,
             pendingUserInputCount: 0,
@@ -613,6 +653,59 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
+        case "thread.muted": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            mutedAt: event.payload.mutedAt,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.unmuted": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            mutedAt: null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
+        case "thread.pr-snapshot-updated": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          const pr = event.payload.pr;
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            prNumber: pr?.number ?? null,
+            prTitle: pr?.title ?? null,
+            prUrl: pr?.url ?? null,
+            prState: pr?.state ?? null,
+            prBaseBranch: pr?.baseBranch ?? null,
+            prHeadBranch: pr?.headBranch ?? null,
+            prBranch: pr?.branch ?? null,
+            prRefreshedAt: pr?.refreshedAt ?? null,
+            updatedAt: event.payload.updatedAt,
+          });
+          return;
+        }
+
         case "thread.meta-updated": {
           const existingRow = yield* projectionThreadRepository.getById({
             threadId: event.payload.threadId,
@@ -620,6 +713,15 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           if (Option.isNone(existingRow)) {
             return;
           }
+          // Clear cached PR snapshot when branch or worktreePath changes —
+          // the snapshot was resolved against the previous branch and would
+          // visually mislead the sidebar until the reactor re-resolves.
+          const branchChanged =
+            event.payload.branch !== undefined && event.payload.branch !== existingRow.value.branch;
+          const worktreeChanged =
+            event.payload.worktreePath !== undefined &&
+            event.payload.worktreePath !== existingRow.value.worktreePath;
+          const clearPr = branchChanged || worktreeChanged;
           yield* projectionThreadRepository.upsert({
             ...existingRow.value,
             ...(event.payload.title !== undefined ? { title: event.payload.title } : {}),
@@ -629,6 +731,18 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             ...(event.payload.branch !== undefined ? { branch: event.payload.branch } : {}),
             ...(event.payload.worktreePath !== undefined
               ? { worktreePath: event.payload.worktreePath }
+              : {}),
+            ...(clearPr
+              ? {
+                  prNumber: null,
+                  prTitle: null,
+                  prUrl: null,
+                  prState: null,
+                  prBaseBranch: null,
+                  prHeadBranch: null,
+                  prBranch: null,
+                  prRefreshedAt: null,
+                }
               : {}),
             updatedAt: event.payload.updatedAt,
           });

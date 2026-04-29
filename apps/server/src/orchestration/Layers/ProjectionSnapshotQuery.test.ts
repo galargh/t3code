@@ -267,6 +267,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-02-24T00:00:00.000Z",
           updatedAt: "2026-02-24T00:00:01.000Z",
           deletedAt: null,
+          mutedAt: null,
         },
       ]);
       assert.deepEqual(snapshot.threads, [
@@ -297,6 +298,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-02-24T00:00:02.000Z",
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
+          mutedAt: null,
+          pr: null,
           deletedAt: null,
           messages: [
             {
@@ -377,6 +380,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           ],
           createdAt: "2026-02-24T00:00:00.000Z",
           updatedAt: "2026-02-24T00:00:01.000Z",
+          mutedAt: null,
         },
       ]);
       assert.deepEqual(shellSnapshot.threads, [
@@ -407,6 +411,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           createdAt: "2026-02-24T00:00:02.000Z",
           updatedAt: "2026-02-24T00:00:03.000Z",
           archivedAt: null,
+          mutedAt: null,
+          pr: null,
           session: {
             threadId: ThreadId.make("thread-1"),
             status: "running",

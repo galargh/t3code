@@ -1231,9 +1231,7 @@ export function GeneralSettingsPanel() {
           }
         >
           {featureBranchPrefixError ? (
-            <p className="mt-2 px-1 pb-3 text-xs text-destructive">
-              {featureBranchPrefixError}
-            </p>
+            <p className="mt-2 px-1 pb-3 text-xs text-destructive">{featureBranchPrefixError}</p>
           ) : null}
         </SettingsRow>
       </SettingsSection>

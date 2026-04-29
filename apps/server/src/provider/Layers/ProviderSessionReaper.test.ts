@@ -72,6 +72,7 @@ function makeReadModel(
         createdAt: now,
         updatedAt: now,
         deletedAt: null,
+        mutedAt: null,
       },
     ],
     threads: threads.map((thread) => ({
@@ -86,6 +87,8 @@ function makeReadModel(
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
+      mutedAt: null,
+      pr: null,
       latestTurn: null,
       messages: [],
       session: thread.session,

@@ -13,15 +13,20 @@ import {
   ProjectCreatedPayload,
   ProjectDeletedPayload,
   ProjectMetaUpdatedPayload,
+  ProjectMutedPayload,
+  ProjectUnmutedPayload,
   ThreadActivityAppendedPayload,
   ThreadArchivedPayload,
   ThreadCreatedPayload,
   ThreadDeletedPayload,
   ThreadInteractionModeSetPayload,
   ThreadMetaUpdatedPayload,
+  ThreadMutedPayload,
+  ThreadPrSnapshotUpdatedPayload,
   ThreadProposedPlanUpsertedPayload,
   ThreadRuntimeModeSetPayload,
   ThreadUnarchivedPayload,
+  ThreadUnmutedPayload,
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
@@ -188,6 +193,7 @@ export function projectEvent(
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             deletedAt: null,
+            mutedAt: null,
           };
 
           return {
@@ -240,6 +246,38 @@ export function projectEvent(
         })),
       );
 
+    case "project.muted":
+      return decodeForEvent(ProjectMutedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          projects: nextBase.projects.map((project) =>
+            project.id === payload.projectId
+              ? {
+                  ...project,
+                  mutedAt: payload.mutedAt,
+                  updatedAt: payload.updatedAt,
+                }
+              : project,
+          ),
+        })),
+      );
+
+    case "project.unmuted":
+      return decodeForEvent(ProjectUnmutedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          projects: nextBase.projects.map((project) =>
+            project.id === payload.projectId
+              ? {
+                  ...project,
+                  mutedAt: null,
+                  updatedAt: payload.updatedAt,
+                }
+              : project,
+          ),
+        })),
+      );
+
     case "thread.created":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
@@ -263,6 +301,8 @@ export function projectEvent(
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             archivedAt: null,
+            mutedAt: null,
+            pr: null,
             deletedAt: null,
             messages: [],
             activities: [],
@@ -314,20 +354,78 @@ export function projectEvent(
         })),
       );
 
-    case "thread.meta-updated":
-      return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
+    case "thread.muted":
+      return decodeForEvent(ThreadMutedPayload, event.payload, event.type, "payload").pipe(
         Effect.map((payload) => ({
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
-            ...(payload.title !== undefined ? { title: payload.title } : {}),
-            ...(payload.modelSelection !== undefined
-              ? { modelSelection: payload.modelSelection }
-              : {}),
-            ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
-            ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
+            mutedAt: payload.mutedAt,
             updatedAt: payload.updatedAt,
           }),
         })),
+      );
+
+    case "thread.unmuted":
+      return decodeForEvent(ThreadUnmutedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            mutedAt: null,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.pr-snapshot-updated":
+      return decodeForEvent(
+        ThreadPrSnapshotUpdatedPayload,
+        event.payload,
+        event.type,
+        "payload",
+      ).pipe(
+        Effect.map((payload) => ({
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            pr: payload.pr,
+            updatedAt: payload.updatedAt,
+          }),
+        })),
+      );
+
+    case "thread.meta-updated":
+      return decodeForEvent(ThreadMetaUpdatedPayload, event.payload, event.type, "payload").pipe(
+        Effect.map((payload) => {
+          // When branch or worktreePath changes, the cached PR snapshot is stale
+          // (it was resolved against the previous branch). Clear it on the same
+          // upsert so the sidebar never flashes a wrong-branch PR icon. The
+          // reactor's eager refresh will dispatch a fresh snapshot shortly after.
+          const branchChanged =
+            payload.branch !== undefined &&
+            (() => {
+              const existing = nextBase.threads.find((entry) => entry.id === payload.threadId);
+              return existing ? existing.branch !== payload.branch : false;
+            })();
+          const worktreeChanged =
+            payload.worktreePath !== undefined &&
+            (() => {
+              const existing = nextBase.threads.find((entry) => entry.id === payload.threadId);
+              return existing ? existing.worktreePath !== payload.worktreePath : false;
+            })();
+          const clearPr = branchChanged || worktreeChanged;
+          return {
+            ...nextBase,
+            threads: updateThread(nextBase.threads, payload.threadId, {
+              ...(payload.title !== undefined ? { title: payload.title } : {}),
+              ...(payload.modelSelection !== undefined
+                ? { modelSelection: payload.modelSelection }
+                : {}),
+              ...(payload.branch !== undefined ? { branch: payload.branch } : {}),
+              ...(payload.worktreePath !== undefined ? { worktreePath: payload.worktreePath } : {}),
+              ...(clearPr ? { pr: null } : {}),
+              updatedAt: payload.updatedAt,
+            }),
+          };
+        }),
       );
 
     case "thread.runtime-mode-set":

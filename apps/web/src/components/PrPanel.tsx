@@ -412,7 +412,7 @@ function EmptyState(props: { message: string }) {
   );
 }
 
-function PrStateBadge(props: { state: "open" | "closed" | "merged"; isDraft: boolean }) {
+function PrStateBadge(props: { state: "open" | "queued" | "closed" | "merged"; isDraft: boolean }) {
   if (props.isDraft) {
     return (
       <Badge variant="outline" size="sm" className="text-zinc-600 dark:text-zinc-300">
@@ -431,6 +431,13 @@ function PrStateBadge(props: { state: "open" | "closed" | "merged"; isDraft: boo
     return (
       <Badge variant="outline" size="sm" className="text-zinc-500 dark:text-zinc-400/80">
         Closed
+      </Badge>
+    );
+  }
+  if (props.state === "queued") {
+    return (
+      <Badge variant="outline" size="sm" className="text-amber-600 dark:text-amber-300">
+        Queued
       </Badge>
     );
   }
@@ -469,8 +476,7 @@ function MergeStateBadge(props: { mergeStateStatus: GitPrMergeStateStatus }) {
 function AutoMergeBadge(props: { autoMergeRequest: GitPrAutoMergeRequest }) {
   return (
     <Badge variant="outline" size="sm" className="text-emerald-600 dark:text-emerald-300">
-      Auto-merge: {props.autoMergeRequest.mergeMethod} · @
-      {props.autoMergeRequest.enabledBy.login}
+      Auto-merge: {props.autoMergeRequest.mergeMethod} · @{props.autoMergeRequest.enabledBy.login}
     </Badge>
   );
 }
@@ -496,9 +502,7 @@ function PrSummaryCard(props: { detail: GitPullRequestDetail | null; isLoading: 
         <span className="text-muted-foreground">·</span>
         <span className="text-foreground">@{detail.author.login}</span>
         <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-          {detail.autoMergeRequest && (
-            <AutoMergeBadge autoMergeRequest={detail.autoMergeRequest} />
-          )}
+          {detail.autoMergeRequest && <AutoMergeBadge autoMergeRequest={detail.autoMergeRequest} />}
           <MergeStateBadge mergeStateStatus={detail.mergeStateStatus} />
           {detail.reviewDecision && <ReviewDecisionBadge value={detail.reviewDecision} />}
         </div>
@@ -762,8 +766,7 @@ function PrActionBar(props: {
     !detail.isDraft &&
     detail.mergeable !== "CONFLICTING" &&
     detail.mergeStateStatus !== "DIRTY";
-  const isClean =
-    detail.mergeStateStatus === "CLEAN" || detail.mergeStateStatus === "HAS_HOOKS";
+  const isClean = detail.mergeStateStatus === "CLEAN" || detail.mergeStateStatus === "HAS_HOOKS";
   const showUpdateBranch = detail.mergeStateStatus === "BEHIND";
   const showResolveConflicts =
     detail.mergeStateStatus === "DIRTY" || detail.mergeable === "CONFLICTING";

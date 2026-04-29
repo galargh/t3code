@@ -8,7 +8,11 @@ export interface NormalizedGitHubPullRequestRecord {
   readonly url: string;
   readonly baseRefName: string;
   readonly headRefName: string;
-  readonly state: "open" | "closed" | "merged";
+  /**
+   * `"queued"` is derived server-side: GitHub reports `state === "OPEN"` AND
+   * `mergeQueueEntry !== null` — i.e. the PR is sitting in the merge queue.
+   */
+  readonly state: "open" | "queued" | "closed" | "merged";
   readonly updatedAt: string | null;
   readonly isCrossRepository?: boolean;
   readonly headRepositoryNameWithOwner?: string | null;
@@ -39,6 +43,13 @@ const GitHubPullRequestSchema = Schema.Struct({
       }),
     ),
   ),
+  mergeQueueEntry: Schema.optional(
+    Schema.NullOr(
+      Schema.Struct({
+        id: Schema.optional(Schema.NullOr(Schema.String)),
+      }),
+    ),
+  ),
 });
 
 function trimOptionalString(value: string | null | undefined): string | null {
@@ -49,7 +60,8 @@ function trimOptionalString(value: string | null | undefined): string | null {
 function normalizeGitHubPullRequestState(input: {
   state?: string | null | undefined;
   mergedAt?: string | null | undefined;
-}): "open" | "closed" | "merged" {
+  mergeQueueEntry?: { readonly id?: string | null | undefined } | null | undefined;
+}): "open" | "queued" | "closed" | "merged" {
   const normalizedState = input.state?.trim().toUpperCase();
   if (
     (typeof input.mergedAt === "string" && input.mergedAt.trim().length > 0) ||
@@ -59,6 +71,11 @@ function normalizeGitHubPullRequestState(input: {
   }
   if (normalizedState === "CLOSED") {
     return "closed";
+  }
+  // GitHub reports the PR as OPEN while it sits in the merge queue. Promote
+  // to "queued" so the sidebar can show the in-queue state distinctly.
+  if (input.mergeQueueEntry !== null && input.mergeQueueEntry !== undefined) {
+    return "queued";
   }
   return "open";
 }

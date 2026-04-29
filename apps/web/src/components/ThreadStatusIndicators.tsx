@@ -16,7 +16,7 @@ import type { SidebarThreadSummary } from "../types";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 
 export interface PrStatusIndicator {
-  label: "PR open" | "PR closed" | "PR merged";
+  label: "PR open" | "PR queued" | "PR closed" | "PR merged";
   colorClass: string;
   tooltip: string;
   url: string;
@@ -38,6 +38,14 @@ export function prStatusIndicator(pr: ThreadPr): PrStatusIndicator | null {
       label: "PR open",
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
       tooltip: `#${pr.number} PR open: ${pr.title}`,
+      url: pr.url,
+    };
+  }
+  if (pr.state === "queued") {
+    return {
+      label: "PR queued",
+      colorClass: "text-amber-600 dark:text-amber-300/90",
+      tooltip: `#${pr.number} PR queued: ${pr.title}`,
       url: pr.url,
     };
   }
@@ -132,6 +140,9 @@ export function ThreadRowLeadingStatus({ thread }: { thread: SidebarThreadSummar
   const lastVisitedAt = useUiStateStore(
     (state) => state.threadLastVisitedAtById[scopedThreadKey(threadRef)],
   );
+  // Prefer thread.pr from the shell (persisted, instant on cold start); fall
+  // back to live useGitStatus only if the shell hasn't carried a PR yet (e.g.
+  // pre-migration data).
   const threadProjectCwd = useStore(
     useMemo(
       () => (state: AppState) =>
@@ -143,9 +154,9 @@ export function ThreadRowLeadingStatus({ thread }: { thread: SidebarThreadSummar
   const gitCwd = thread.worktreePath ?? threadProjectCwd;
   const gitStatus = useGitStatus({
     environmentId: thread.environmentId,
-    cwd: thread.branch != null ? gitCwd : null,
+    cwd: thread.pr == null && thread.branch != null ? gitCwd : null,
   });
-  const pr = resolveThreadPr(thread.branch, gitStatus.data);
+  const pr = thread.pr ?? resolveThreadPr(thread.branch, gitStatus.data);
   const prStatus = prStatusIndicator(pr);
   const threadStatus = resolveThreadStatusPill({
     thread: {

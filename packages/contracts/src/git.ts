@@ -42,9 +42,9 @@ const GitPushStepStatus = Schema.Literals([
 ]);
 const GitBranchStepStatus = Schema.Literals(["created", "skipped_not_requested"]);
 const GitPrStepStatus = Schema.Literals(["created", "opened_existing", "skipped_not_requested"]);
-const GitStatusPrState = Schema.Literals(["open", "closed", "merged"]);
+const GitStatusPrState = Schema.Literals(["open", "queued", "closed", "merged"]);
 const GitPullRequestReference = TrimmedNonEmptyStringSchema;
-const GitPullRequestState = Schema.Literals(["open", "closed", "merged"]);
+const GitPullRequestState = Schema.Literals(["open", "queued", "closed", "merged"]);
 const GitPreparePullRequestThreadMode = Schema.Literals(["local", "worktree"]);
 export const GitHostingProviderKind = Schema.Literals(["github", "gitlab", "unknown"]);
 export type GitHostingProviderKind = typeof GitHostingProviderKind.Type;
@@ -628,11 +628,9 @@ export const GitPullRequestDisableAutoMergeInput = Schema.Struct({
   cwd: TrimmedNonEmptyStringSchema,
   prNumber: PositiveInt,
 });
-export type GitPullRequestDisableAutoMergeInput =
-  typeof GitPullRequestDisableAutoMergeInput.Type;
+export type GitPullRequestDisableAutoMergeInput = typeof GitPullRequestDisableAutoMergeInput.Type;
 
 export const GitPullRequestDisableAutoMergeResult = Schema.Struct({
   prNumber: PositiveInt,
 });
-export type GitPullRequestDisableAutoMergeResult =
-  typeof GitPullRequestDisableAutoMergeResult.Type;
+export type GitPullRequestDisableAutoMergeResult = typeof GitPullRequestDisableAutoMergeResult.Type;

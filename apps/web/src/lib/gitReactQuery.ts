@@ -59,8 +59,7 @@ export const gitMutationKeys = {
     environmentId: EnvironmentId | null,
     cwd: string | null,
     prNumber: number | null,
-  ) =>
-    ["git", "mutation", "pr-disable-auto-merge", environmentId ?? null, cwd, prNumber] as const,
+  ) => ["git", "mutation", "pr-disable-auto-merge", environmentId ?? null, cwd, prNumber] as const,
 };
 
 export function invalidateGitQueries(

@@ -22,7 +22,7 @@ export interface GitHubPullRequestSummary {
   readonly url: string;
   readonly baseRefName: string;
   readonly headRefName: string;
-  readonly state?: "open" | "closed" | "merged";
+  readonly state?: "open" | "queued" | "closed" | "merged";
   readonly isCrossRepository?: boolean;
   readonly headRepositoryNameWithOwner?: string | null;
   readonly headRepositoryOwnerLogin?: string | null;

@@ -36,6 +36,7 @@ const readModel: OrchestrationReadModel = {
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      mutedAt: null,
     },
     {
       id: ProjectId.make("project-b"),
@@ -49,6 +50,7 @@ const readModel: OrchestrationReadModel = {
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
+      mutedAt: null,
     },
   ],
   threads: [
@@ -67,6 +69,8 @@ const readModel: OrchestrationReadModel = {
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
+      mutedAt: null,
+      pr: null,
       latestTurn: null,
       messages: [],
       session: null,
@@ -90,6 +94,8 @@ const readModel: OrchestrationReadModel = {
       createdAt: now,
       updatedAt: now,
       archivedAt: null,
+      mutedAt: null,
+      pr: null,
       latestTurn: null,
       messages: [],
       session: null,
