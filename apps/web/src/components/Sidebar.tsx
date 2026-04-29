@@ -355,9 +355,12 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     ),
   );
   const gitCwd = thread.worktreePath ?? threadProjectCwd ?? props.projectCwd;
+  // Prefer thread.pr from the shell (persisted, instant on cold start, survives
+  // mute/unmute). Fall back to live useGitStatus only if the shell hasn't
+  // carried a PR yet (e.g. pre-migration data).
   const gitStatus = useGitStatus({
     environmentId: thread.environmentId,
-    cwd: thread.branch != null ? gitCwd : null,
+    cwd: thread.pr == null && thread.branch != null ? gitCwd : null,
   });
   const isHighlighted = isActive || isSelected;
   const isThreadRunning =
@@ -368,7 +371,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
       lastVisitedAt,
     },
   });
-  const pr = resolveThreadPr(thread.branch, gitStatus.data);
+  const pr = thread.pr ?? resolveThreadPr(thread.branch, gitStatus.data);
   const prStatus = prStatusIndicator(pr);
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isConfirmingArchive = confirmingArchiveThreadKey === threadKey && !isThreadRunning;

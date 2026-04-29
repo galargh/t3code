@@ -8,6 +8,7 @@ import {
   OrchestrationReadModel,
   OrchestrationShellSnapshot,
   OrchestrationThread,
+  type OrchestrationThreadPrSnapshot,
   ProjectScript,
   TurnId,
   type OrchestrationCheckpointSummary,
@@ -215,6 +216,46 @@ function mapProjectShellRow(
     scripts: row.scripts,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    mutedAt: row.mutedAt,
+  };
+}
+
+/**
+ * Convert the eight nullable PR snapshot columns from a thread row into
+ * a single snapshot or null. Enforces the all-or-nothing convention:
+ * if any column is null, treat the whole snapshot as absent.
+ */
+function mapPrSnapshotRow(row: {
+  readonly prNumber: number | null;
+  readonly prTitle: string | null;
+  readonly prUrl: string | null;
+  readonly prState: OrchestrationThreadPrSnapshot["state"] | null;
+  readonly prBaseBranch: string | null;
+  readonly prHeadBranch: string | null;
+  readonly prBranch: string | null;
+  readonly prRefreshedAt: string | null;
+}): OrchestrationThreadPrSnapshot | null {
+  if (
+    row.prNumber === null ||
+    row.prTitle === null ||
+    row.prUrl === null ||
+    row.prState === null ||
+    row.prBaseBranch === null ||
+    row.prHeadBranch === null ||
+    row.prBranch === null ||
+    row.prRefreshedAt === null
+  ) {
+    return null;
+  }
+  return {
+    number: row.prNumber,
+    title: row.prTitle,
+    url: row.prUrl,
+    state: row.prState,
+    baseBranch: row.prBaseBranch,
+    headBranch: row.prHeadBranch,
+    branch: row.prBranch,
+    refreshedAt: row.prRefreshedAt,
   };
 }
 
@@ -243,7 +284,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          muted_at AS "mutedAt"
         FROM projection_projects
         ORDER BY created_at ASC, project_id ASC
       `,
@@ -267,6 +309,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          muted_at AS "mutedAt",
+          pr_number AS "prNumber",
+          pr_title AS "prTitle",
+          pr_url AS "prUrl",
+          pr_state AS "prState",
+          pr_base_branch AS "prBaseBranch",
+          pr_head_branch AS "prHeadBranch",
+          pr_branch AS "prBranch",
+          pr_refreshed_at AS "prRefreshedAt",
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
@@ -439,7 +490,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          muted_at AS "mutedAt"
         FROM projection_projects
         WHERE workspace_root = ${workspaceRoot}
           AND deleted_at IS NULL
@@ -461,7 +513,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           scripts_json AS "scripts",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
-          deleted_at AS "deletedAt"
+          deleted_at AS "deletedAt",
+          muted_at AS "mutedAt"
         FROM projection_projects
         WHERE project_id = ${projectId}
           AND deleted_at IS NULL
@@ -521,6 +574,15 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           created_at AS "createdAt",
           updated_at AS "updatedAt",
           archived_at AS "archivedAt",
+          muted_at AS "mutedAt",
+          pr_number AS "prNumber",
+          pr_title AS "prTitle",
+          pr_url AS "prUrl",
+          pr_state AS "prState",
+          pr_base_branch AS "prBaseBranch",
+          pr_head_branch AS "prHeadBranch",
+          pr_branch AS "prBranch",
+          pr_refreshed_at AS "prRefreshedAt",
           latest_user_message_at AS "latestUserMessageAt",
           pending_approval_count AS "pendingApprovalCount",
           pending_user_input_count AS "pendingUserInputCount",
@@ -907,6 +969,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
                 deletedAt: row.deletedAt,
+                mutedAt: row.mutedAt,
               }));
 
               const threads: ReadonlyArray<OrchestrationThread> = threadRows.map((row) => ({
@@ -922,6 +985,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                 createdAt: row.createdAt,
                 updatedAt: row.updatedAt,
                 archivedAt: row.archivedAt,
+                mutedAt: row.mutedAt,
+                pr: mapPrSnapshotRow(row),
                 deletedAt: row.deletedAt,
                 messages: messagesByThread.get(row.threadId) ?? [],
                 proposedPlans: proposedPlansByThread.get(row.threadId) ?? [],
@@ -1064,6 +1129,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     createdAt: row.createdAt,
                     updatedAt: row.updatedAt,
                     archivedAt: row.archivedAt,
+                    mutedAt: row.mutedAt,
+                    pr: mapPrSnapshotRow(row),
                     session: sessionByThread.get(row.threadId) ?? null,
                     latestUserMessageAt: row.latestUserMessageAt,
                     hasPendingApprovals: row.pendingApprovalCount > 0,
@@ -1131,6 +1198,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                     createdAt: option.value.createdAt,
                     updatedAt: option.value.updatedAt,
                     deletedAt: option.value.deletedAt,
+                    mutedAt: option.value.mutedAt,
                   } satisfies OrchestrationProject),
                 ),
               ),
@@ -1260,6 +1328,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         createdAt: threadRow.value.createdAt,
         updatedAt: threadRow.value.updatedAt,
         archivedAt: threadRow.value.archivedAt,
+        mutedAt: threadRow.value.mutedAt,
+        pr: mapPrSnapshotRow(threadRow.value),
         session: Option.isSome(sessionRow) ? mapSessionRow(sessionRow.value) : null,
         latestUserMessageAt: threadRow.value.latestUserMessageAt,
         hasPendingApprovals: threadRow.value.pendingApprovalCount > 0,
@@ -1354,6 +1424,8 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         createdAt: threadRow.value.createdAt,
         updatedAt: threadRow.value.updatedAt,
         archivedAt: threadRow.value.archivedAt,
+        mutedAt: threadRow.value.mutedAt,
+        pr: mapPrSnapshotRow(threadRow.value),
         deletedAt: null,
         messages: messageRows.map((row) => {
           const message = {

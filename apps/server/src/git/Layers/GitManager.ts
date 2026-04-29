@@ -91,7 +91,7 @@ interface OpenPrInfo {
 }
 
 interface PullRequestInfo extends OpenPrInfo, PullRequestHeadRemoteInfo {
-  state: "open" | "closed" | "merged";
+  state: "open" | "queued" | "closed" | "merged";
   updatedAt: string | null;
 }
 
@@ -101,7 +101,7 @@ interface ResolvedPullRequest {
   url: string;
   baseBranch: string;
   headBranch: string;
-  state: "open" | "closed" | "merged";
+  state: "open" | "queued" | "closed" | "merged";
 }
 
 interface PullRequestHeadRemoteInfo {
@@ -446,7 +446,7 @@ function toStatusPr(pr: PullRequestInfo): {
   url: string;
   baseBranch: string;
   headBranch: string;
-  state: "open" | "closed" | "merged";
+  state: "open" | "queued" | "closed" | "merged";
 } {
   return {
     number: pr.number,
@@ -478,7 +478,7 @@ function toResolvedPullRequest(pr: {
   url: string;
   baseRefName: string;
   headRefName: string;
-  state?: "open" | "closed" | "merged";
+  state?: "open" | "queued" | "closed" | "merged";
 }): ResolvedPullRequest {
   return {
     number: pr.number,
@@ -935,7 +935,7 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
             "--limit",
             "20",
             "--json",
-            "number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner",
+            "number,title,url,baseRefName,headRefName,state,mergedAt,updatedAt,isCrossRepository,headRepository,headRepositoryOwner,mergeQueueEntry",
           ],
         })
         .pipe(Effect.map((result) => result.stdout));
@@ -1930,10 +1930,27 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
     return { prNumber: input.prNumber };
   });
 
+  const findLatestPrPublic: GitManagerShape["findLatestPr"] = ({ cwd, branch, upstreamRef }) =>
+    findLatestPr(cwd, { branch, upstreamRef }).pipe(
+      Effect.map((pr) =>
+        pr === null
+          ? null
+          : ({
+              number: pr.number,
+              title: pr.title,
+              url: pr.url,
+              state: pr.state,
+              baseRefName: pr.baseRefName,
+              headRefName: pr.headRefName,
+            } as const),
+      ),
+    );
+
   return {
     localStatus,
     remoteStatus,
     status,
+    findLatestPr: findLatestPrPublic,
     invalidateLocalStatus,
     invalidateRemoteStatus,
     invalidateStatus,

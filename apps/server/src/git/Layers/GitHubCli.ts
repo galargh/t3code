@@ -250,7 +250,7 @@ const makeGitHubCli = Effect.sync(() => {
           "--limit",
           String(input.limit ?? 1),
           "--json",
-          "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
+          "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner,mergeQueueEntry",
         ],
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
@@ -284,7 +284,7 @@ const makeGitHubCli = Effect.sync(() => {
           "view",
           input.reference,
           "--json",
-          "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner",
+          "number,title,url,baseRefName,headRefName,state,mergedAt,isCrossRepository,headRepository,headRepositoryOwner,mergeQueueEntry",
         ],
       }).pipe(
         Effect.map((result) => result.stdout.trim()),
@@ -398,13 +398,7 @@ const makeGitHubCli = Effect.sync(() => {
     getPullRequestChecks: (input) =>
       execute({
         cwd: input.cwd,
-        args: [
-          "pr",
-          "checks",
-          String(input.prNumber),
-          "--json",
-          "name,state,bucket,workflow,link",
-        ],
+        args: ["pr", "checks", String(input.prNumber), "--json", "name,state,bucket,workflow,link"],
       }).pipe(
         Effect.mapError((error) => {
           if (error.operation === "execute" || error.operation === "stdout") {
@@ -454,14 +448,7 @@ const makeGitHubCli = Effect.sync(() => {
       const fetchThreads = (prNodeId: string) =>
         execute({
           cwd: input.cwd,
-          args: [
-            "api",
-            "graphql",
-            "-f",
-            `id=${prNodeId}`,
-            "-f",
-            `query=${REVIEW_THREADS_QUERY}`,
-          ],
+          args: ["api", "graphql", "-f", `id=${prNodeId}`, "-f", `query=${REVIEW_THREADS_QUERY}`],
         }).pipe(Effect.mapError(reTagError));
 
       return fetchView.pipe(

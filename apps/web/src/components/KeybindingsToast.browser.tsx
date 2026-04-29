@@ -128,6 +128,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
         deletedAt: null,
+        mutedAt: null,
       },
     ],
     threads: [
@@ -147,6 +148,8 @@ function createMinimalSnapshot(): OrchestrationReadModel {
         createdAt: NOW_ISO,
         updatedAt: NOW_ISO,
         archivedAt: null,
+        mutedAt: null,
+        pr: null,
         deletedAt: null,
         messages: [
           {
@@ -203,6 +206,8 @@ function toShellSnapshot(snapshot: OrchestrationReadModel) {
       createdAt: thread.createdAt,
       updatedAt: thread.updatedAt,
       archivedAt: thread.archivedAt,
+      mutedAt: null,
+      pr: null,
       session: thread.session,
       latestUserMessageAt:
         thread.messages.findLast((message) => message.role === "user")?.createdAt ?? null,

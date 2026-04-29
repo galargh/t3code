@@ -70,6 +70,31 @@ export interface GitManagerShape {
   ) => Effect.Effect<GitStatusRemoteResult | null, GitManagerServiceError>;
 
   /**
+   * Resolve the latest pull request for a (cwd, branch) pair.
+   *
+   * Mirrors the lookup that backs `remoteStatus.pr` but skips the
+   * working-tree details and ahead/behind counts, suitable for callers that
+   * only care about PR identity (e.g. the thread.pr-snapshot reactor).
+   *
+   * Returns null when no matching PR is found.
+   */
+  readonly findLatestPr: (input: {
+    readonly cwd: string;
+    readonly branch: string;
+    readonly upstreamRef: string | null;
+  }) => Effect.Effect<
+    {
+      readonly number: number;
+      readonly title: string;
+      readonly url: string;
+      readonly state: "open" | "queued" | "closed" | "merged";
+      readonly baseRefName: string;
+      readonly headRefName: string;
+    } | null,
+    GitManagerServiceError
+  >;
+
+  /**
    * Clear any cached local status snapshot for a repository.
    */
   readonly invalidateLocalStatus: (cwd: string) => Effect.Effect<void, never>;

@@ -58,6 +58,7 @@ function makeTestLayer(state: {
         return state.currentRemoteStatus;
       }),
     status: () => Effect.die("status should not be called in this test"),
+    findLatestPr: () => Effect.die("findLatestPr should not be called in this test"),
     invalidateLocalStatus: () =>
       Effect.sync(() => {
         state.localInvalidationCalls += 1;
@@ -268,6 +269,7 @@ describe("GitStatusBroadcasterLive", () => {
               ),
             ),
           status: () => Effect.die("status should not be called in this test"),
+          findLatestPr: () => Effect.die("findLatestPr should not be called in this test"),
           invalidateLocalStatus: () =>
             Effect.sync(() => {
               state.localInvalidationCalls += 1;

@@ -300,6 +300,133 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       };
     }
 
+    case "thread.mute": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      // Idempotent: emit nothing if already muted, so repeat clicks don't churn the event log
+      // and any race with project-level mute doesn't append duplicate events.
+      if (thread.mutedAt !== null) {
+        return [];
+      }
+      const occurredAt = command.createdAt;
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.muted",
+        payload: {
+          threadId: command.threadId,
+          mutedAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.unmute": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      if (thread.mutedAt === null) {
+        return [];
+      }
+      const occurredAt = command.createdAt;
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.unmuted",
+        payload: {
+          threadId: command.threadId,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "project.mute": {
+      const project = yield* requireProject({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      if (project.mutedAt !== null) {
+        return [];
+      }
+      const occurredAt = command.createdAt;
+      return {
+        ...withEventBase({
+          aggregateKind: "project",
+          aggregateId: command.projectId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "project.muted",
+        payload: {
+          projectId: command.projectId,
+          mutedAt: occurredAt,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "project.unmute": {
+      const project = yield* requireProject({
+        readModel,
+        command,
+        projectId: command.projectId,
+      });
+      if (project.mutedAt === null) {
+        return [];
+      }
+      const occurredAt = command.createdAt;
+      return {
+        ...withEventBase({
+          aggregateKind: "project",
+          aggregateId: command.projectId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "project.unmuted",
+        payload: {
+          projectId: command.projectId,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
+    case "thread.pr-snapshot.set": {
+      yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const occurredAt = command.createdAt;
+      return {
+        ...withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt,
+          commandId: command.commandId,
+        }),
+        type: "thread.pr-snapshot-updated",
+        payload: {
+          threadId: command.threadId,
+          pr: command.pr,
+          updatedAt: occurredAt,
+        },
+      };
+    }
+
     case "thread.meta.update": {
       yield* requireThread({
         readModel,

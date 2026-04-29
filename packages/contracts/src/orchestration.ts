@@ -9,6 +9,7 @@ import {
   IsoDateTime,
   MessageId,
   NonNegativeInt,
+  PositiveInt,
   ProjectId,
   ProviderItemId,
   ThreadId,
@@ -172,6 +173,7 @@ export const OrchestrationProject = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletedAt: Schema.NullOr(IsoDateTime),
+  mutedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type OrchestrationProject = typeof OrchestrationProject.Type;
 
@@ -294,6 +296,46 @@ export const OrchestrationLatestTurn = Schema.Struct({
 });
 export type OrchestrationLatestTurn = typeof OrchestrationLatestTurn.Type;
 
+/**
+ * Pull-request state literal carried on the thread's `pr` snapshot.
+ *
+ * `"queued"` is derived server-side: GitHub reports `state === "OPEN"` AND
+ * `mergeQueueEntry !== null` — i.e. the PR is sitting in the merge queue.
+ */
+export const OrchestrationThreadPrState = Schema.Literals(["open", "queued", "closed", "merged"]);
+export type OrchestrationThreadPrState = typeof OrchestrationThreadPrState.Type;
+
+/**
+ * Persisted snapshot of a thread's associated pull request.
+ *
+ * This is a first-class attribute on the thread so the sidebar can render
+ * PR icons immediately on cold start without waiting for a git status poll.
+ * The reactor (`ThreadPullRequestReactor`) keeps it in sync via two paths:
+ * eager refresh on lifecycle events (`thread.created`, branch change,
+ * unmute, unarchive), and passive consumption of the broadcaster's
+ * `remoteUpdated` events for any cwd that has live unmuted threads.
+ */
+export const OrchestrationThreadPrSnapshot = Schema.Struct({
+  number: PositiveInt,
+  title: TrimmedNonEmptyString,
+  url: Schema.String,
+  state: OrchestrationThreadPrState,
+  baseBranch: TrimmedNonEmptyString,
+  headBranch: TrimmedNonEmptyString,
+  /**
+   * Identity: which thread.branch this snapshot was resolved for. The
+   * projector clears the snapshot when the thread's branch changes, so
+   * stale data from the previous branch is never displayed.
+   */
+  branch: TrimmedNonEmptyString,
+  /**
+   * When the reactor last refreshed this snapshot. Informational only —
+   * NOT used as a TTL.
+   */
+  refreshedAt: IsoDateTime,
+});
+export type OrchestrationThreadPrSnapshot = typeof OrchestrationThreadPrSnapshot.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -309,6 +351,10 @@ export const OrchestrationThread = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  mutedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  pr: Schema.NullOr(OrchestrationThreadPrSnapshot).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   deletedAt: Schema.NullOr(IsoDateTime),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(
@@ -337,6 +383,7 @@ export const OrchestrationProjectShell = Schema.Struct({
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
+  mutedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
 });
 export type OrchestrationProjectShell = typeof OrchestrationProjectShell.Type;
 
@@ -355,6 +402,10 @@ export const OrchestrationThreadShell = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  mutedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  pr: Schema.NullOr(OrchestrationThreadPrSnapshot).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   session: Schema.NullOr(OrchestrationSession),
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   hasPendingApprovals: Schema.Boolean,
@@ -475,6 +526,34 @@ const ThreadUnarchiveCommand = Schema.Struct({
   type: Schema.Literal("thread.unarchive"),
   commandId: CommandId,
   threadId: ThreadId,
+});
+
+const ThreadMuteCommand = Schema.Struct({
+  type: Schema.Literal("thread.mute"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
+const ThreadUnmuteCommand = Schema.Struct({
+  type: Schema.Literal("thread.unmute"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  createdAt: IsoDateTime,
+});
+
+const ProjectMuteCommand = Schema.Struct({
+  type: Schema.Literal("project.mute"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  createdAt: IsoDateTime,
+});
+
+const ProjectUnmuteCommand = Schema.Struct({
+  type: Schema.Literal("project.unmute"),
+  commandId: CommandId,
+  projectId: ProjectId,
+  createdAt: IsoDateTime,
 });
 
 const ThreadMetaUpdateCommand = Schema.Struct({
@@ -613,10 +692,14 @@ const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
+  ProjectMuteCommand,
+  ProjectUnmuteCommand,
   ThreadCreateCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
+  ThreadMuteCommand,
+  ThreadUnmuteCommand,
   ThreadMetaUpdateCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
@@ -634,10 +717,14 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectCreateCommand,
   ProjectMetaUpdateCommand,
   ProjectDeleteCommand,
+  ProjectMuteCommand,
+  ProjectUnmuteCommand,
   ThreadCreateCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
+  ThreadMuteCommand,
+  ThreadUnmuteCommand,
   ThreadMetaUpdateCommand,
   ThreadRuntimeModeSetCommand,
   ThreadInteractionModeSetCommand,
@@ -715,6 +802,19 @@ const ThreadRevertCompleteCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+/**
+ * Server-only command dispatched by `ThreadPullRequestReactor` to update
+ * the persisted PR snapshot on a thread. Not exposed to clients —
+ * intentionally absent from `DispatchableClientOrchestrationCommand`.
+ */
+const ThreadPrSnapshotSetCommand = Schema.Struct({
+  type: Schema.Literal("thread.pr-snapshot.set"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  pr: Schema.NullOr(OrchestrationThreadPrSnapshot),
+  createdAt: IsoDateTime,
+});
+
 const InternalOrchestrationCommand = Schema.Union([
   ThreadSessionSetCommand,
   ThreadMessageAssistantDeltaCommand,
@@ -723,6 +823,7 @@ const InternalOrchestrationCommand = Schema.Union([
   ThreadTurnDiffCompleteCommand,
   ThreadActivityAppendCommand,
   ThreadRevertCompleteCommand,
+  ThreadPrSnapshotSetCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;
 
@@ -736,13 +837,18 @@ export const OrchestrationEventType = Schema.Literals([
   "project.created",
   "project.meta-updated",
   "project.deleted",
+  "project.muted",
+  "project.unmuted",
   "thread.created",
   "thread.deleted",
   "thread.archived",
   "thread.unarchived",
+  "thread.muted",
+  "thread.unmuted",
   "thread.meta-updated",
   "thread.runtime-mode-set",
   "thread.interaction-mode-set",
+  "thread.pr-snapshot-updated",
   "thread.message-sent",
   "thread.turn-start-requested",
   "thread.turn-interrupt-requested",
@@ -788,6 +894,17 @@ export const ProjectDeletedPayload = Schema.Struct({
   deletedAt: IsoDateTime,
 });
 
+export const ProjectMutedPayload = Schema.Struct({
+  projectId: ProjectId,
+  mutedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const ProjectUnmutedPayload = Schema.Struct({
+  projectId: ProjectId,
+  updatedAt: IsoDateTime,
+});
+
 export const ThreadCreatedPayload = Schema.Struct({
   threadId: ThreadId,
   projectId: ProjectId,
@@ -816,6 +933,23 @@ export const ThreadArchivedPayload = Schema.Struct({
 
 export const ThreadUnarchivedPayload = Schema.Struct({
   threadId: ThreadId,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadMutedPayload = Schema.Struct({
+  threadId: ThreadId,
+  mutedAt: IsoDateTime,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadUnmutedPayload = Schema.Struct({
+  threadId: ThreadId,
+  updatedAt: IsoDateTime,
+});
+
+export const ThreadPrSnapshotUpdatedPayload = Schema.Struct({
+  threadId: ThreadId,
+  pr: Schema.NullOr(OrchestrationThreadPrSnapshot),
   updatedAt: IsoDateTime,
 });
 
@@ -968,6 +1102,16 @@ export const OrchestrationEvent = Schema.Union([
   }),
   Schema.Struct({
     ...EventBaseFields,
+    type: Schema.Literal("project.muted"),
+    payload: ProjectMutedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("project.unmuted"),
+    payload: ProjectUnmutedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
     type: Schema.Literal("thread.created"),
     payload: ThreadCreatedPayload,
   }),
@@ -985,6 +1129,21 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.unarchived"),
     payload: ThreadUnarchivedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.muted"),
+    payload: ThreadMutedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.unmuted"),
+    payload: ThreadUnmutedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.pr-snapshot-updated"),
+    payload: ThreadPrSnapshotUpdatedPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,
